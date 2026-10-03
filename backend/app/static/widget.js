@@ -1,5 +1,5 @@
 /*!
- * BotForge widget: embed with one tag:
+ * Forkbot widget: embed with one tag:
  *   <script src="https://YOUR-API/widget.js" data-bot-id="bot_xxx" async></script>
  * Optional: data-position="left", data-open="true"
  * The chat survives page reloads: a random visitor id + the conversation id live in localStorage;
@@ -9,18 +9,18 @@
 (function () {
   "use strict";
   var script = document.currentScript;
-  if (!script || window.__botforgeLoaded) return;
-  window.__botforgeLoaded = true;
+  if (!script || window.__forkbotLoaded) return;
+  window.__forkbotLoaded = true;
 
   var BOT = script.getAttribute("data-bot-id");
   var API = new URL(script.src).origin;
   var LEFT = script.getAttribute("data-position") === "left";
-  if (!BOT) { console.warn("[botforge] missing data-bot-id"); return; }
+  if (!BOT) { console.warn("[forkbot] missing data-bot-id"); return; }
 
   // Fonts must be registered on the document, not inside the shadow root.
-  if (!document.querySelector("link[data-botforge-font]")) {
+  if (!document.querySelector("link[data-forkbot-font]")) {
     var l = document.createElement("link");
-    l.rel = "stylesheet"; l.setAttribute("data-botforge-font", "");
+    l.rel = "stylesheet"; l.setAttribute("data-forkbot-font", "");
     l.href = "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap";
     document.head.appendChild(l);
   }
@@ -76,7 +76,7 @@
   var STAR = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1l1.6 7.2L20 4l-4.2 6.4L23 12l-7.2 1.6L20 20l-6.4-4.2L12 23l-1.6-7.2L4 20l4.2-6.4L1 12l7.2-1.6L4 4l6.4 4.2z"/></svg>';
 
   var host = document.createElement("div");
-  host.id = "botforge-widget";
+  host.id = "forkbot-widget";
   var shadow = host.attachShadow({ mode: "open" });
   shadow.innerHTML = '<style>' + CSS + '</style>' +
     '<div class="root">' +
@@ -87,7 +87,7 @@
         '<div class="msgs" aria-live="polite"></div>' +
         '<form><input name="q" autocomplete="off" maxlength="1000" placeholder="ask a question…" aria-label="your question"/>' +
         '<button class="send" type="submit" aria-label="send">' + ARROW + '</button></form>' +
-        '<div class="foot">powered by botforge</div>' +
+        '<div class="foot">powered by forkbot</div>' +
       '</div>' +
       '<button class="launcher" aria-label="open chat"><span>say hi to <b class="lname">us</b></span><span class="arrow">' + ARROW + '</span></button>' +
     '</div>';
@@ -98,7 +98,7 @@
   var busy = false, greeted = false;
 
   // localStorage can throw (privacy mode, blocked storage): the widget still works, just forgets on reload
-  var KEY = "botforge:" + BOT + ":";
+  var KEY = "forkbot:" + BOT + ":";
   function load(k) { try { return localStorage.getItem(KEY + k); } catch (e) { return null; } }
   function save(k, v) { try { v == null ? localStorage.removeItem(KEY + k) : localStorage.setItem(KEY + k, v); } catch (e) {} }
   function randomId() {

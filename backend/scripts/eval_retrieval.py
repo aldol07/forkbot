@@ -3,7 +3,7 @@
     cd backend
     python scripts/eval_retrieval.py ../test-docs/pdf/01-pre.pdf ... -q eval/questions.jsonl
 
-Indexes the files into a throwaway bot (local Docker Postgres database `botforge_eval` by default),
+Indexes the files into a throwaway bot (local Docker Postgres database `forkbot_eval` by default),
 then for every question in the eval set compares:
 
     vector          pgvector cosine only
@@ -24,7 +24,7 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://botforge:botforge@localhost:5433/botforge_eval")
+os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://forkbot:forkbot@localhost:5433/forkbot_eval")
 
 
 def ensure_local_database(url_str: str, allow_remote: bool) -> None:
@@ -64,7 +64,7 @@ def main():
         if args.bot:
             bot = db.get(Bot, uuid.UUID(args.bot))
         else:
-            user = User(email=f"eval-{uuid.uuid4().hex[:8]}@botforge.local", password_hash="!")
+            user = User(email=f"eval-{uuid.uuid4().hex[:8]}@forkbot.local", password_hash="!")
             db.add(user)
             db.flush()
             bot = Bot(owner_id=user.id, name="eval")

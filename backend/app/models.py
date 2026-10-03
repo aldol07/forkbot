@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, Computed, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Computed, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -85,6 +85,18 @@ class Chunk(Base):
     content: Mapped[str] = mapped_column(Text)
     embedding = mapped_column(Vector(get_settings().embedding_dim))
     tsv = mapped_column(TSVECTOR, Computed("to_tsvector('english', content)", persisted=True))
+
+
+class ProviderKey(Base):
+    """A user's own API key for an LLM provider, encrypted at rest (see crypto.py)."""
+    __tablename__ = "provider_keys"
+    __table_args__ = (UniqueConstraint("owner_id", "provider", name="uq_provider_keys_owner_provider"),)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(20))
+    key_encrypted: Mapped[str] = mapped_column(Text)
+    last4: Mapped[str] = mapped_column(String(4))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
 class Conversation(Base):

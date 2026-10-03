@@ -1,63 +1,94 @@
-# ✷ botforge
+# ✷ forkbot
 
-Multi-tenant SaaS: upload documents, get a document-grounded AI chatbot, embed it on any
-website with one `<script>` tag. See `PLAN.md` for the architecture and roadmap.
+Upload your documents, get a chatbot that answers **only** from them, and put it on any website with
+one `<script>` tag. Multi-tenant: every account has its own bots, documents, chats and API keys.
 
-**Stack:** FastAPI · PostgreSQL 16 + pgvector · Next.js 15 · fastembed (local embeddings) ·
-Groq / OpenAI / Gemini / Ollama (switchable) · Docker
+**Stack:** FastAPI · PostgreSQL 16 + pgvector (Supabase or Docker) · Next.js 15 · fastembed (local
+embeddings + cross-encoder re-ranker) · Groq / OpenAI / Gemini / Ollama · Docker
 
-## Quick start (Windows)
+## What it does
 
-Prereqs: Python 3.11, Node 20+, Docker Desktop **running**.
+- **Ingestion** – PDF, TXT and Markdown up to 25 MB. Text is split per page / per heading section, so
+  every answer cites `file.pdf · p.3`. Originals are kept (local disk or any S3-compatible bucket) for
+  download and re-indexing.
+- **Retrieval** – pgvector similarity + IDF-weighted full-text search, fused with Reciprocal Rank
+  Fusion, then re-ranked by a cross-encoder. Follow-up questions are rewritten into standalone
+  queries first.
+- **Docs-only answers** – if no passage clears the re-ranker threshold the bot says so and the LLM
+  is never called. On the eval set every off-topic question was refused.
+- **Bring your own key** – users paste their own Groq / OpenAI / Gemini keys (checked, encrypted at
+  rest, never shown again). The server's keys are an optional fallback (`SERVER_LLM_KEYS`).
+- **Conversations** – stored server-side; continue old chats from the dashboard, and the widget
+  remembers a visitor's chat across reloads.
+- **Embeddable widget** – shadow-DOM script with no dependencies; only answers on the domains you
+  allow.
 
-```powershell
-cd C:\Users\Karti\resume\botforge
-docker compose up -d                          # Postgres :5433 (pgvector) + Redis :6380
-copy .env.example .env                        # then set GROQ_API_KEY and JWT_SECRET
+## Retrieval quality
 
-# backend
-.\.venv\Scripts\Activate.ps1
-cd backend
-uvicorn app.main:app --reload --port 8000     # API docs at /docs only if API_DOCS=true in .env
+`backend/scripts/eval_retrieval.py` on 60 answerable + 12 off-topic questions (k = 6):
 
-# frontend (new terminal)
-cd C:\Users\Karti\resume\botforge\frontend
-copy .env.local.example .env.local
-npm run dev                                   # http://localhost:3000
+| mode | right page in top 6 | MRR | off-topic refused |
+| --- | --- | --- | --- |
+| vector only | 95.0 % | 0.762 | – |
+| keyword only | 93.3 % | 0.751 | – |
+| hybrid (RRF) | 98.3 % | 0.828 | – |
+| hybrid + re-rank + gate | 91.7 % | **0.854** | **100 %** |
+
+## Running it locally
+
+Needs Python 3.11, Node 20+ and Docker.
+
+```bash
+docker compose up -d                 # Postgres + pgvector on :5433
+cp .env.example .env                 # set JWT_SECRET; add a provider key or paste one in the UI later
+python -m venv .venv && .venv/Scripts/pip install -r backend/requirements.txt   # bin/ on macOS/Linux
+cd backend && ../.venv/Scripts/uvicorn app.main:app --reload --port 8000
 ```
 
-First run downloads the local embedding model (~130 MB) the first time a document is ingested.
-
-## Try it
-
-1. Sign up at http://localhost:3000 → create a bot → **documents**: drop a PDF.
-2. **chat**: ask questions; switch provider (groq / openai / gemini / ollama / mock) to compare answers and first-token latency.
-3. **embed**: copy the script tag, or click **open demo** to see the widget on a pretend customer site.
-
-## Comparing providers from the terminal
-
-```powershell
-cd backend
-python scripts/compare_providers.py --email you@x.com --password ... --bot <bot-uuid> `
-  --providers groq,gemini,mock -q "what is the refund policy?" -q "how long is shipping?"
+```bash
+cd frontend
+cp .env.local.example .env.local
+npm install && npm run dev           # http://localhost:3000
 ```
 
-Writes a CSV to `backend/scripts/out/`.
+Windows users can run `setup.ps1` for the venv + npm steps. The embedding and re-ranker models
+(~210 MB) download on first use. Database migrations run on API startup.
+
+Then: sign up → create a bot → upload a document → chat → **embed** tab → *open demo* to see the
+widget on a sample page.
 
 ## Tests
 
-```powershell
-cd backend
-pytest -q        # uses Postgres from docker compose (db botforge_test), mock LLM, hash embeddings
+```bash
+cd backend && ../.venv/Scripts/python -m pytest -q
 ```
 
-## Project layout
+Uses the Docker Postgres (`forkbot_test` database), a mock LLM and hash embeddings, so no keys or
+model downloads are needed. The suite refuses to run against a non-local database.
+
+## Deploying for free
+
+- **Database + files:** Supabase (pgvector is built in; migrations enable RLS on every table, so the
+  Data API can't read them).
+- **API:** `backend/Dockerfile` (models baked in) on Hugging Face Spaces, Render or similar.
+- **Dashboard:** Vercel with root directory `frontend`, `BACKEND_URL` and `NEXT_PUBLIC_API_URL`
+  pointing at the API.
+- Set `SERVER_LLM_KEYS=false` so users bring their own keys, `COOKIE_SECURE=true`, and a long
+  `JWT_SECRET`.
+
+## Layout
 
 ```
-backend/app/    main · config · db · models · schemas · security
-                llm/providers.py          one OpenAI-compatible client, many providers
-                services/                 parsing · chunking · embeddings · ingest · retrieval (RRF) · chat (SSE)
-                routers/                  auth · bots · documents · chat · public (widget, Origin allow-list)
-                static/widget.js          the embeddable widget (shadow DOM, no deps)
-frontend/       Next.js dashboard, "paper lab" design system (../DESIGN.md)
+backend/app/        main · config · db · models · schemas · security · crypto · storage
+  llm/providers.py  one OpenAI-compatible client for every provider, user keys, key checks
+  services/         parsing · chunking · embeddings · ingest · retrieval · rerank · rewrite · chat
+  routers/          auth · bots · documents · chat · conversations · keys · public (widget)
+  static/widget.js  the embeddable widget
+backend/migrations/ Alembic
+backend/scripts/    eval_retrieval · make_eval_set · compare_providers
+frontend/           Next.js dashboard
 ```
+
+---
+
+Built by **aldol** · [dubeykartikay13@gmail.com](mailto:dubeykartikay13@gmail.com)

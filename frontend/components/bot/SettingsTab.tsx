@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
+import ApiKeysCard from "@/components/bot/ApiKeysCard";
 import { api, Bot, Provider } from "@/lib/api";
 
 export default function SettingsTab({ bot, onSaved }: { bot: Bot; onSaved: (b: Bot) => void }) {
@@ -11,7 +12,8 @@ export default function SettingsTab({ bot, onSaved }: { bot: Bot; onSaved: (b: B
   });
   const [providers, setProviders] = useState<Provider[]>([]);
   const [msg, setMsg] = useState("");
-  useEffect(() => { api<Provider[]>("/providers").then(setProviders).catch(() => {}); }, []);
+  const loadProviders = () => api<Provider[]>("/providers").then(setProviders).catch(() => {});
+  useEffect(() => { loadProviders(); }, []);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   async function save(e: FormEvent) {
@@ -46,7 +48,7 @@ export default function SettingsTab({ bot, onSaved }: { bot: Bot; onSaved: (b: B
             <label htmlFor="p">llm provider</label>
             <select id="p" className="select" value={form.llm_provider} onChange={set("llm_provider")}>
               <option value="">server default</option>
-              {providers.map((p) => <option key={p.name} value={p.name}>{p.name}{p.configured ? "" : " (no key)"}</option>)}
+              {providers.map((p) => <option key={p.name} value={p.name}>{p.name}{p.key_source === "user" ? " (your key)" : p.configured ? "" : " (no key)"}</option>)}
             </select>
           </div>
           <div className="field" style={{ flex: 1, minWidth: 160 }}>
@@ -57,6 +59,7 @@ export default function SettingsTab({ bot, onSaved }: { bot: Bot; onSaved: (b: B
         <div className="row"><button className="btn">save</button>{msg && <span className={msg === "saved" ? "chip ok" : "error-text"}>{msg}</span>}</div>
       </form>
       <div className="stack">
+        <ApiKeysCard providers={providers} onChange={loadProviders} />
         <div className="card">
           <h2 className="h2">danger zone</h2>
           <button className="btn danger" onClick={remove}>delete this bot</button>

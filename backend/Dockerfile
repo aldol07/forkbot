@@ -1,6 +1,6 @@
-# BotForge API image. Works on Hugging Face Spaces (Docker SDK, port 7860), Render, Koyeb, Cloud Run.
-#   docker build -t botforge-api backend
-#   docker run -p 7860:7860 --env-file .env botforge-api
+# Forkbot API image. Works on Hugging Face Spaces (Docker SDK, port 7860), Render, Koyeb, Cloud Run.
+#   docker build -t forkbot-api backend
+#   docker run -p 7860:7860 --env-file .env forkbot-api
 FROM python:3.11-slim
 
 # HF Spaces runs containers as uid 1000; a matching user keeps the cache dir writable everywhere.

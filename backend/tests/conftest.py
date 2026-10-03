@@ -1,18 +1,18 @@
 """Test setup: real Postgres (pgvector), offline `hash` embeddings and `mock` LLM.
 
-Point TEST_DATABASE_URL at a throwaway database (default: botforge_test on the compose Postgres).
+Point TEST_DATABASE_URL at a throwaway database (default: forkbot_test on the compose Postgres).
 """
 import os
 import tempfile
 
 os.environ.setdefault("DATABASE_URL", os.environ.get(
-    "TEST_DATABASE_URL", "postgresql+psycopg://botforge:botforge@localhost:5433/botforge_test"))
+    "TEST_DATABASE_URL", "postgresql+psycopg://forkbot:forkbot@localhost:5433/forkbot_test"))
 os.environ["EMBEDDING_PROVIDER"] = "hash"
 os.environ["DEFAULT_LLM_PROVIDER"] = "mock"
 os.environ["JWT_SECRET"] = "test-secret-" + "x" * 32
 os.environ["STORAGE_BACKEND"] = "local"
 os.environ["RERANKER"] = "none"  # tests that need the gate install a fake reranker
-os.environ["STORAGE_DIR"] = tempfile.mkdtemp(prefix="botforge-test-storage-")
+os.environ["STORAGE_DIR"] = tempfile.mkdtemp(prefix="forkbot-test-storage-")
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -42,7 +42,7 @@ from app.main import app  # noqa: E402
 @pytest.fixture(autouse=True)
 def fresh_db():
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS messages, conversations, chunks, documents, bots, users, "
+        conn.execute(text("DROP TABLE IF EXISTS provider_keys, messages, conversations, chunks, documents, bots, users, "
                           "alembic_version CASCADE"))
     init_db()
     yield

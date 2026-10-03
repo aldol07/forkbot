@@ -1,6 +1,6 @@
 """Run the same questions through several LLM providers against one bot and compare.
 
-Usage (backend running, from botforge/backend with the venv active):
+Usage (backend running, from forkbot/backend with the venv active):
     python scripts/compare_providers.py --email you@x.com --password ... --bot <bot-id> \
         --providers groq,gemini,mock -q "what is the refund policy?" -q "how long is shipping?"
 

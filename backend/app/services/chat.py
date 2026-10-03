@@ -18,6 +18,7 @@ from ..config import get_settings
 from ..db import SessionLocal
 from ..llm.providers import ProviderError, provider_specs, resolve, stream_chat
 from ..models import Bot, Conversation, Document, Message
+from .keys import load_user_keys
 from .retrieval import retrieve
 from .rewrite import rewrite_query
 
@@ -141,8 +142,9 @@ def _chat_stream(db, bot_id, message, conversation_id, source, visitor_id, provi
     s = get_settings()
     t0 = time.perf_counter()
     bot = db.get(Bot, bot_id)
+    user_keys = load_user_keys(db, bot.owner_id)
     try:
-        spec, model_name = resolve(provider or bot.llm_provider, model or bot.llm_model)
+        spec, model_name = resolve(provider or bot.llm_provider, model or bot.llm_model, user_keys)
     except ProviderError as e:
         yield sse({"type": "error", "message": str(e)})
         return
@@ -209,7 +211,7 @@ def _chat_stream(db, bot_id, message, conversation_id, source, visitor_id, provi
                     yield sse({"type": "token", "text": delta})
                 break
             except ProviderError as e:
-                fallback = _rate_limit_fallback(spec, e, started=bool(answer))
+                fallback = _rate_limit_fallback(spec, e, started=bool(answer), user_keys=user_keys)
                 if not fallback:
                     raise
                 spec, model_name = fallback  # e.g. Groq free tier (8k tokens/min) exhausted → Gemini
@@ -227,12 +229,12 @@ def _chat_stream(db, bot_id, message, conversation_id, source, visitor_id, provi
                "retrieval_ms": retrieval_ms, "first_token_ms": first_token_ms, "total_ms": total_ms})
 
 
-def _rate_limit_fallback(spec, error: ProviderError, started: bool):
+def _rate_limit_fallback(spec, error: ProviderError, started: bool, user_keys: dict | None = None):
     """(spec, model) of LLM_FALLBACK_PROVIDER if `error` is a rate limit hit before any token was sent."""
     name = get_settings().llm_fallback_provider
     if started or not name or name == spec.name or "429" not in str(error):
         return None
-    fb = provider_specs().get(name)
+    fb = provider_specs(user_keys).get(name)
     return (fb, fb.default_model) if fb and fb.configured else None
 
 

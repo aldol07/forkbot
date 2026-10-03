@@ -13,6 +13,15 @@ from dataclasses import dataclass
 from ..config import get_settings
 
 
+BYOK_PROVIDERS = ("groq", "openai", "gemini")  # providers a user can paste their own key for
+
+BASE_URLS = {
+    "groq": "https://api.groq.com/openai/v1",
+    "openai": None,
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
+}
+
+
 @dataclass(frozen=True)
 class ProviderSpec:
     name: str
@@ -20,22 +29,34 @@ class ProviderSpec:
     api_key: str
     default_model: str
     needs_key: bool = True
+    key_source: str | None = None  # "user" | "server" | None
 
     @property
     def configured(self) -> bool:
         return bool(self.api_key) or not self.needs_key
 
 
-def provider_specs() -> dict[str, ProviderSpec]:
+def provider_specs(user_keys: dict[str, str] | None = None) -> dict[str, ProviderSpec]:
+    """Provider registry for one account: its own pasted key wins; the server's .env key is used only
+    when SERVER_LLM_KEYS is on (ollama counts as a server resource too)."""
     s = get_settings()
-    return {
-        "groq": ProviderSpec("groq", "https://api.groq.com/openai/v1", s.groq_api_key, s.groq_model),
-        "openai": ProviderSpec("openai", None, s.openai_api_key, s.openai_model),
-        "gemini": ProviderSpec("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/",
-                               s.gemini_api_key, s.gemini_model),
-        "ollama": ProviderSpec("ollama", s.ollama_base_url, "ollama", s.ollama_model, needs_key=False),
-        "mock": ProviderSpec("mock", None, "", "mock-extractive", needs_key=False),
-    }
+    user_keys = user_keys or {}
+    server = {"groq": s.groq_api_key, "openai": s.openai_api_key, "gemini": s.gemini_api_key}
+    models = {"groq": s.groq_model, "openai": s.openai_model, "gemini": s.gemini_model}
+    specs = {}
+    for name in BYOK_PROVIDERS:
+        if user_keys.get(name):
+            key, source = user_keys[name], "user"
+        elif s.server_llm_keys and server[name]:
+            key, source = server[name], "server"
+        else:
+            key, source = "", None
+        specs[name] = ProviderSpec(name, BASE_URLS[name], key, models[name], key_source=source)
+    if s.server_llm_keys:
+        specs["ollama"] = ProviderSpec("ollama", s.ollama_base_url, "ollama", s.ollama_model, needs_key=False,
+                                       key_source="server")
+    specs["mock"] = ProviderSpec("mock", None, "", "mock-extractive", needs_key=False)
+    return specs
 
 
 class ProviderError(RuntimeError):
@@ -67,15 +88,32 @@ def clean_citations(deltas: Iterator[str]) -> Iterator[str]:
         yield _CITATION.sub(_fix_citation, pending)
 
 
-def resolve(provider: str | None, model: str | None) -> tuple[ProviderSpec, str]:
-    specs = provider_specs()
+def resolve(provider: str | None, model: str | None,
+            user_keys: dict[str, str] | None = None) -> tuple[ProviderSpec, str]:
+    specs = provider_specs(user_keys)
     name = provider or get_settings().default_llm_provider
     spec = specs.get(name)
     if spec is None:
-        raise ProviderError(f"unknown provider '{name}'")
+        raise ProviderError(f"provider '{name}' is not available on this server")
     if not spec.configured:
-        raise ProviderError(f"provider '{name}' has no API key: set {name.upper()}_API_KEY in .env")
+        if get_settings().server_llm_keys:
+            raise ProviderError(f"provider '{name}' has no API key: add yours in the bot's settings tab "
+                                f"(or set {name.upper()}_API_KEY in the server's .env)")
+        raise ProviderError(f"no {name} API key yet: add your own in the bot's settings tab")
     return spec, (model or spec.default_model)
+
+
+def check_key(provider: str, api_key: str) -> tuple[bool, str]:
+    """Cheap validity check for a pasted key: list the provider's models (costs no tokens)."""
+    from openai import OpenAI, OpenAIError
+
+    try:
+        models = OpenAI(api_key=api_key, base_url=BASE_URLS[provider], timeout=15, max_retries=0).models.list()
+        return True, f"key works ({len(list(models))} models available)"
+    except OpenAIError as e:
+        if getattr(e, "status_code", None) in (400, 401, 403):
+            return False, "the provider rejected this key"
+        return False, f"couldn't verify the key: {getattr(e, 'message', None) or type(e).__name__}"
 
 
 def stream_chat(spec: ProviderSpec, model: str, messages: list[dict]) -> Iterator[str]:

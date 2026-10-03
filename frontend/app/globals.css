@@ -167,6 +167,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .sources li { margin: 6px 0; }
 .source-file { margin-top: 8px; }
 .source-file ol { margin: 4px 0 0; padding-left: 22px; }
+.key-row { display: flex; flex-direction: column; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.key-row:last-child { border-bottom: 0; padding-bottom: 0; }
 .chat-form { display: flex; gap: 10px; padding: 14px 16px; border-top: 1px solid var(--line); }
 .send { width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--ink); color: var(--paper); cursor: pointer; display: grid; place-items: center; flex-shrink: 0; }
 .send:disabled { opacity: .4; cursor: default; }
@@ -194,6 +196,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .bot-card:hover { transform: translateY(-2px); border-color: var(--line-strong); }
 .bot-card h3 { margin: 0; font-size: 22px; letter-spacing: -.015em; }
 .footer { padding: 28px 24px 40px; color: var(--ink-3); font-size: 13px; }
+.footer.credit { text-align: center; font-size: 14px; }
+.footer.credit a { color: var(--ink); font-weight: 700; text-underline-offset: 4px; }
+.footer.credit a:hover { text-decoration-thickness: 2px; }
 
 @media (max-width: 860px) {
   .hero { grid-template-columns: 1fr; min-height: 0; padding: 32px 0 60px; }

@@ -1,4 +1,4 @@
-"""BotForge API entrypoint:  uvicorn app.main:app --reload"""
+"""Forkbot API entrypoint:  uvicorn app.main:app --reload"""
 import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
@@ -10,11 +10,11 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from .config import get_settings
 from .db import init_db
-from .routers import auth, bots, chat, conversations, documents, public
+from .routers import auth, bots, chat, conversations, documents, keys, public
 from .services.chat import purge_old_conversations
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-log = logging.getLogger("botforge")
+log = logging.getLogger("forkbot")
 STATIC = Path(__file__).parent / "static"
 
 
@@ -44,11 +44,12 @@ async def lifespan(app: FastAPI):
 
 
 _docs = get_settings().api_docs  # interactive API docs are opt-in (API_DOCS=true), off in production
-app = FastAPI(title="BotForge API", version="0.1.0", lifespan=lifespan,
+app = FastAPI(title="Forkbot API", version="0.1.0", lifespan=lifespan,
               docs_url="/docs" if _docs else None, redoc_url=None,
               openapi_url="/openapi.json" if _docs else None)
 
-for r in (auth.router, bots.router, documents.router, chat.router, conversations.router, public.router):
+for r in (auth.router, bots.router, documents.router, chat.router, conversations.router, keys.router,
+          public.router):
     app.include_router(r)
 
 

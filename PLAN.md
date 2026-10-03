@@ -1,4 +1,4 @@
-# BotForge: Implementation Plan
+# forkbot: design and roadmap
 
 > Multi-tenant SaaS where users upload documents (and images) and deploy an embeddable AI
 > chatbot on any website with one `<script>` tag.
@@ -151,6 +151,8 @@ matching `visitor_id`. Phase 2 adds Redis rate limits, since non-browser clients
 12. [x] Keyword search: any-term match ranked by IDF (fixes ID lookups like `01PRE-Q01` being buried by common words)
 13. [x] Docs-only answering: strict prompt (no outside knowledge, plain text), bold markers and out-of-range citations stripped server-side; provider/model pickers removed from chat, server-providers card removed from settings; API docs opt-in (`API_DOCS=true`)
 14. [x] Chat tab: pick up any earlier dashboard conversation (picker + "continue in chat" from history); sources grouped as "N passages from M files"
+15. [x] Bring your own key: users paste Groq/OpenAI/Gemini keys in bot settings (validated by listing models, Fernet-encrypted, only last 4 shown); bots use the owner's key first; `SERVER_LLM_KEYS=false` stops server keys being spent on users' chats
+16. [x] Renamed to forkbot; unused Redis removed (comes back with the phase-2 rate limiter)
 
 ### Phase 1.5: storage, conversations, retrieval quality, images (current)
 1. [x] **Alembic**: baseline migration of current schema; `init_db` → `alembic upgrade head` (adopts old create_all databases)
@@ -164,7 +166,7 @@ matching `visitor_id`. Phase 2 adds Redis rate limits, since non-browser clients
 9. [~] **Supabase**: DB migrated (session pooler `aws-0-ap-southeast-1`, pgvector in `extensions`, RLS on every table → Data API returns `[]`); app runs locally against it. Still to do: private Storage bucket + S3 keys
 10. [ ] **Deploy**: HF Space (API) + Vercel (dashboard); smoke test against the checklist in §7
 
-### Phase 2 (resume bullets)
+### Phase 2: hardening
 1. Row-Level Security: non-superuser app role, `SET LOCAL app.user_id` per request, policies on all tables, cross-tenant test returns 0 rows
 2. Celery worker for ingestion (Redis/Upstash broker): ingestion with vision calls gets slow
 3. Redis token-bucket rate limit + monthly message quota per tenant
@@ -175,16 +177,16 @@ matching `visitor_id`. Phase 2 adds Redis rate limits, since non-browser clients
 ## 7. Running and testing locally
 
 ```powershell
-cd C:\Users\Karti\resume\botforge
-docker compose up -d                                  # Postgres :5433, Redis :6380
+cd forkbot
+docker compose up -d                                  # Postgres :5433
 cd backend; ..\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --reload --port 8000             # http://localhost:8000/docs
 # new terminal
-cd C:\Users\Karti\resume\botforge\frontend
+cd frontend
 npx next dev -p 3001                                  # :3000 is used by open-webui
 ```
 
-Put test files in `botforge/test-docs/` (git-ignored). Local stored files go to `botforge/storage/` (git-ignored).
+Put test files in `test-docs/` (git-ignored). Locally stored uploads go to `storage/` (git-ignored).
 
 **Manual checklist before every push**
 - [ ] signup / login / logout
@@ -197,9 +199,9 @@ Put test files in `botforge/test-docs/` (git-ignored). Local stored files go to 
 - [ ] `pytest -q` green; eval numbers not worse than last run
 - [ ] Docker image builds and passes the same smoke test
 
-## 8. Resume-bullet → evidence map
+## 8. Results and where they're measured
 
-| Bullet | Where it's proven | Number to measure |
+| Claim | Where it's proven | Measured |
 | --- | --- | --- |
 | Embeddable widget + domain allow-listing | `public.py`, `widget.js`, `test_public.py` | – |
 | Hybrid retrieval + re-ranking + query rewriting | `retrieval.py`, `scripts/eval_retrieval.py` | hybrid vs vector-only: hit@6 95.0→98.3%, MRR 0.762→0.828; re-rank MRR 0.854 with 100% off-topic refusal, on 72 questions |

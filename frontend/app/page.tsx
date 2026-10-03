@@ -55,9 +55,8 @@ export default function Home() {
           </div>
         </section>
       </main>
-      <footer className="container footer spread">
-        <span>botforge · built by <b>aldol</b></span>
-        <a className="btn ghost sm" href="mailto:dubeykartikay13@gmail.com?subject=botforge">contact</a>
+      <footer className="container footer credit">
+        forkbot · built by <a href="mailto:dubeykartikay13@gmail.com?subject=forkbot" title="contact: dubeykartikay13@gmail.com">aldol</a>
       </footer>
     </>
   );

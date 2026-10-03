@@ -77,8 +77,8 @@ def test_unconfigured_provider_reports_error(client):
 def test_providers_listing(client):
     signup(client)
     names = {p["name"]: p for p in client.get("/api/providers").json()}
-    assert set(names) == {"groq", "openai", "gemini", "ollama", "mock"}
-    assert names["mock"]["configured"] and names["mock"]["is_default"]
+    assert set(names) == {"groq", "openai", "gemini", "ollama"}  # the offline mock is internal
+    assert not names["openai"]["configured"] and names["openai"]["key_source"] is None
 
 
 def test_bot_names_are_unique_per_account(client):

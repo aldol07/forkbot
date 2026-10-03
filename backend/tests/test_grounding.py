@@ -124,9 +124,9 @@ def test_rate_limited_provider_falls_back(client, monkeypatch):
         yield "Express takes 2 days [1]."
 
     monkeypatch.setattr(chat_service, "stream_chat", fake_stream)
-    monkeypatch.setattr(chat_service, "resolve", lambda p, m: (ProviderSpec("groq", None, "k", "gpt-oss"), "gpt-oss"))
+    monkeypatch.setattr(chat_service, "resolve", lambda *a: (ProviderSpec("groq", None, "k", "gpt-oss"), "gpt-oss"))
     monkeypatch.setattr(chat_service, "provider_specs",
-                        lambda: {"gemini": ProviderSpec("gemini", None, "k", "flash-lite")})
+                        lambda *a: {"gemini": ProviderSpec("gemini", None, "k", "flash-lite")})
     signup(client)
     bot = make_bot_with_doc(client)
     ev, answer = ask(client, bot, "how long does express shipping take?")

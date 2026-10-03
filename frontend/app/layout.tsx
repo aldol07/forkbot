@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "botforge: your docs, now a chatbot",
+  title: "forkbot: your docs, now a chatbot",
   description: "Upload documents, get an embeddable AI chatbot for any website.",
 };
 

@@ -1,13 +1,32 @@
-.venv/
+# secrets / local config
 .env
-__pycache__/
-.pytest_cache/
-frontend/node_modules/
-frontend/.next/
+.env.*
+!.env.example
+!.env.local.example
 frontend/.env.local
-backend/scripts/out/
-.cache/
-test-docs/
-storage/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# node / next
+node_modules/
+frontend/.next/
+frontend/next-env.d.ts
 *.tsbuildinfo
+
+# runtime data (models, uploads, private test files, eval outputs)
+.cache/
+storage/
+test-docs/
 backend/eval/*.jsonl
+backend/scripts/out/
+
+# editors / os
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

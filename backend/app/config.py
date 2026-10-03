@@ -4,18 +4,17 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ROOT = Path(__file__).resolve().parents[2]  # botforge/
+ROOT = Path(__file__).resolve().parents[2]  # forkbot/
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(ROOT / ".env", ".env"), extra="ignore")
 
-    database_url: str = "postgresql+psycopg://botforge:botforge@localhost:5433/botforge"
-    redis_url: str = "redis://localhost:6380/0"
+    database_url: str = "postgresql+psycopg://forkbot:forkbot@localhost:5433/forkbot"
 
     jwt_secret: str = "dev-insecure-secret-change-me"
     jwt_ttl_hours: int = 24 * 7
-    cookie_name: str = "bf_session"
+    cookie_name: str = "forkbot_session"
     cookie_secure: bool = False
     frontend_origin: str = "http://localhost:3000"
 
@@ -54,7 +53,11 @@ class Settings(BaseSettings):
     rerank_candidates: int = 10    # fused candidates scored by the cross-encoder (CPU cost grows with this)
     rerank_max_chars: int = 1000
     rerank_min_score: float = -6.0  # below this a chunk is "not about the question"; see services/rerank.py
-    llm_fallback_provider: str = "gemini"  # used when the chosen provider is rate-limited (Groq free tier: 8k tokens/min)
+    llm_fallback_provider: str = "gemini"
+    # Users can paste their own provider keys (bot settings tab). With SERVER_LLM_KEYS=false bots only ever
+    # use those, so the keys in this .env are never spent on users' chats (the setting for a public deploy).
+    server_llm_keys: bool = True
+    encryption_key: str = ""  # Fernet key for stored provider keys; derived from JWT_SECRET when empty  # used when the chosen provider is rate-limited (Groq free tier: 8k tokens/min)
     rewrite_model: str = "openai/gpt-oss-20b"  # follow-up → standalone query (Groq); other providers use their chat model
     api_docs: bool = False         # expose /docs and /openapi.json (handy locally, off by default)
     history_turns: int = 10        # prior messages sent to the LLM

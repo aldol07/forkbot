@@ -17,7 +17,7 @@ from .chunking import chunk_text
 from .embeddings import get_embedder
 from .parsing import extract_segments, file_kind
 
-log = logging.getLogger("botforge.ingest")
+log = logging.getLogger("forkbot.ingest")
 
 
 def ingest_document(document_id: uuid.UUID, data: bytes | None = None) -> None:

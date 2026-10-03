@@ -10,7 +10,7 @@ export type Doc = {
   id: string; filename: string; content_type: string | null; size_bytes: number; status: string; error: string | null;
   n_pages: number; n_chunks: number; has_file: boolean; created_at: string;
 };
-export type Provider = { name: string; configured: boolean; default_model: string; is_default: boolean };
+export type Provider = { name: string; configured: boolean; default_model: string; key_source: "user" | "server" | null; is_default: boolean };
 export type Source = { n: number; filename: string; page: number | null; section: string | null; kind: string; snippet: string; score: number };
 export type Conversation = { id: string; source: "dashboard" | "widget"; title: string; created_at: string; last_message_at: string; n_messages: number };
 export type StoredMessage = {

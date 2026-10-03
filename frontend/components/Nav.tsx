@@ -12,7 +12,7 @@ export default function Nav({ signedIn }: { signedIn: boolean }) {
     <div className="container">
       <header className="topbar">
         <nav className="nav" aria-label="main">
-          <Link href="/" className="logo"><Star />botforge</Link>
+          <Link href="/" className="logo"><Star />forkbot</Link>
           <div className="navlinks">
             {signedIn ? (
               <>
