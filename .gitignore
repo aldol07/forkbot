@@ -30,3 +30,7 @@ backend/scripts/out/
 .DS_Store
 Thumbs.db
 *.log
+
+# local working notes / helpers (kept on disk, not published)
+PLAN.md
+setup.ps1

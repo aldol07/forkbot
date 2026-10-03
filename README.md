@@ -51,8 +51,7 @@ cp .env.local.example .env.local
 npm install && npm run dev           # http://localhost:3000
 ```
 
-Windows users can run `setup.ps1` for the venv + npm steps. The embedding and re-ranker models
-(~210 MB) download on first use. Database migrations run on API startup.
+The embedding and re-ranker models (~210 MB) download on first use. Database migrations run on API startup.
 
 Then: sign up → create a bot → upload a document → chat → **embed** tab → *open demo* to see the
 widget on a sample page.
