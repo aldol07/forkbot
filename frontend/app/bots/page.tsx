@@ -13,16 +13,18 @@ export default function BotsPage() {
   const [bots, setBots] = useState<Bot[] | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => { if (user) api<Bot[]>("/bots").then(setBots).catch((e) => setError(e.message)); }, [user]);
 
   async function create(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || creating) return; // Enter + click, or a double click, used to create two bots
+    setCreating(true); setError("");
     try {
       const bot = await api<Bot>("/bots", { method: "POST", body: JSON.stringify({ name }) });
       router.push(`/bots/${bot.id}`);
-    } catch (err) { setError((err as Error).message); }
+    } catch (err) { setError((err as Error).message); setCreating(false); }
   }
 
   if (!user) return null;
@@ -37,7 +39,7 @@ export default function BotsPage() {
           </div>
           <form className="row" onSubmit={create}>
             <input className="input" style={{ width: 260 }} placeholder="name a new bot…" aria-label="new bot name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
-            <button className="btn" disabled={!name.trim()}>create <span className="arrow sm"><Arrow /></span></button>
+            <button className="btn" disabled={!name.trim() || creating}>{creating ? "creating…" : "create"} <span className="arrow sm"><Arrow /></span></button>
           </form>
         </div>
         {error && <p className="error-text">{error}</p>}

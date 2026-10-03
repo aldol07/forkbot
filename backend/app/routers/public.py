@@ -5,16 +5,17 @@ is the per-bot **Origin allow-list**. Requests whose Origin isn't allowed get no
 (the browser blocks the response) and a 403. Phase 2 adds Redis token-bucket rate limits,
 since non-browser clients can forge Origin.
 """
+import uuid
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Bot
-from ..schemas import PublicChatRequest
+from ..models import Bot, Conversation, Message
+from ..schemas import VISITOR_ID, PublicChatRequest, PublicMessageOut
 from ..services.chat import chat_stream
 from .chat import SSE_HEADERS
 
@@ -98,5 +99,22 @@ def bot_info(request: Request, bot: Bot = Depends(allowed_bot)):
 def widget_chat(body: PublicChatRequest, request: Request, bot: Bot = Depends(allowed_bot)):
     headers = {**SSE_HEADERS, **cors_headers(request_origin(request))}
     # Widget visitors can't pick providers/models: always the bot's own settings.
-    return StreamingResponse(chat_stream(bot.id, body.message, body.history),
-                             media_type="text/event-stream", headers=headers)
+    return StreamingResponse(
+        chat_stream(bot.id, body.message, conversation_id=body.conversation_id,
+                    source="widget", visitor_id=body.visitor_id),
+        media_type="text/event-stream", headers=headers)
+
+
+@router.get("/bots/{public_id}/conversations/{cid}")
+def widget_conversation(cid: uuid.UUID, request: Request, visitor_id: str = Query(pattern=VISITOR_ID),
+                        bot: Bot = Depends(allowed_bot), db: Session = Depends(get_db)):
+    """Restore a visitor's chat after a page reload. Only the visitor that started it can read it."""
+    conv = db.scalar(select(Conversation).where(
+        Conversation.id == cid, Conversation.bot_id == bot.id,
+        Conversation.source == "widget", Conversation.visitor_id == visitor_id))
+    if not conv:
+        raise HTTPException(404, "conversation not found")
+    msgs = db.scalars(select(Message).where(Message.conversation_id == conv.id)
+                      .order_by(Message.created_at, Message.id)).all()
+    return JSONResponse({"messages": [PublicMessageOut.model_validate(m).model_dump() for m in msgs]},
+                        headers=cors_headers(request_origin(request)))

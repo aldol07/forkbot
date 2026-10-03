@@ -18,7 +18,7 @@ copy .env.example .env                        # then set GROQ_API_KEY and JWT_SE
 # backend
 .\.venv\Scripts\Activate.ps1
 cd backend
-uvicorn app.main:app --reload --port 8000     # API docs: http://localhost:8000/docs
+uvicorn app.main:app --reload --port 8000     # API docs at /docs only if API_DOCS=true in .env
 
 # frontend (new terminal)
 cd C:\Users\Karti\resume\botforge\frontend

@@ -6,13 +6,22 @@ export type Bot = {
   llm_provider: string | null; llm_model: string | null; allowed_domains: string[];
   created_at: string; n_documents: number;
 };
-export type Doc = { id: string; filename: string; size_bytes: number; status: string; error: string | null; n_chunks: number; created_at: string };
+export type Doc = {
+  id: string; filename: string; content_type: string | null; size_bytes: number; status: string; error: string | null;
+  n_pages: number; n_chunks: number; has_file: boolean; created_at: string;
+};
 export type Provider = { name: string; configured: boolean; default_model: string; is_default: boolean };
-export type Source = { n: number; filename: string; snippet: string; score: number };
+export type Source = { n: number; filename: string; page: number | null; section: string | null; kind: string; snippet: string; score: number };
+export type Conversation = { id: string; source: "dashboard" | "widget"; title: string; created_at: string; last_message_at: string; n_messages: number };
+export type StoredMessage = {
+  id: number; role: "user" | "assistant"; content: string; sources: Source[]; provider: string | null; model: string | null;
+  first_token_ms: number | null; total_ms: number | null; created_at: string;
+};
 export type StreamEvent =
+  | { type: "meta"; conversation_id: string }
   | { type: "token"; text: string }
   | { type: "sources"; items: Source[] }
-  | { type: "done"; provider: string; model: string; retrieval_ms: number; first_token_ms: number | null; total_ms: number }
+  | { type: "done"; provider: string | null; model: string | null; grounded: boolean; retrieval_ms: number; first_token_ms: number | null; total_ms: number }
   | { type: "error"; message: string };
 
 export const PUBLIC_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -61,5 +70,12 @@ export async function streamChat(path: string, body: unknown, onEvent: (e: Strea
     for (const f of frames) if (f.startsWith("data: ")) onEvent(JSON.parse(f.slice(6)));
   }
 }
+
+/** "faq.pdf · p.3" / "guide.md · Setup › Install" */
+export const sourceLabel = (s: Pick<Source, "filename" | "page" | "section">) =>
+  [s.filename, s.page ? `p.${s.page}` : null, s.section].filter(Boolean).join(" · ");
+
+export const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
 export const fmtBytes = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);

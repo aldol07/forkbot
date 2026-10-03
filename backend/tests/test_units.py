@@ -20,3 +20,9 @@ def test_hash_embedder_similarity():
     a, b, c = e.embed_query("refund policy days"), e.embed_query("refund policy within days"), e.embed_query("express shipping cost")
     dot = lambda x, y: sum(i * j for i, j in zip(x, y))
     assert dot(a, b) > dot(a, c)
+
+
+def test_gpt_oss_citations_normalised_across_deltas():
+    from app.llm.providers import clean_citations
+    parts = ["cannot be enrolled【", "1†L1", "-L3】 and [2", "†source] ok [3] fine 5% [see note", " below]"]
+    assert "".join(clean_citations(iter(parts))) == "cannot be enrolled[1] and [2] ok [3] fine 5% [see note below]"

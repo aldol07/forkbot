@@ -2,6 +2,8 @@
  * BotForge widget: embed with one tag:
  *   <script src="https://YOUR-API/widget.js" data-bot-id="bot_xxx" async></script>
  * Optional: data-position="left", data-open="true"
+ * The chat survives page reloads: a random visitor id + the conversation id live in localStorage;
+ * the server keeps the history and only returns it to the same visitor.
  * Renders inside a shadow root so host-page CSS can't leak in (or out).
  */
 (function () {
@@ -49,6 +51,9 @@
     background: var(--paper2); border-bottom:1px solid var(--line); }
   .brand { font-weight:800; font-size:17px; letter-spacing:-.02em; display:flex; gap:8px; align-items:center; text-transform: lowercase; }
   .close { border:0; background:none; font-size:22px; line-height:1; cursor:pointer; color:var(--ink); padding:4px 6px; }
+  .new { border:1px solid var(--line); background:none; border-radius:999px; font: 600 12px Manrope, system-ui, sans-serif; color:var(--ink2); cursor:pointer; padding:4px 10px; }
+  .new:hover { color:var(--ink); border-color: var(--ink); }
+  .actions { display:flex; align-items:center; gap:6px; }
   .msgs { flex:1; overflow-y:auto; padding:18px; display:flex; flex-direction:column; gap:10px; }
   .msg { max-width:85%; padding:10px 14px; font-size:14.5px; line-height:1.5; white-space:pre-wrap; word-wrap:break-word; }
   .bot { align-self:flex-start; background:var(--paper2); border:1px solid var(--line); border-radius:18px 18px 18px 4px; }
@@ -77,7 +82,8 @@
     '<div class="root">' +
       '<div class="panel" role="dialog" aria-label="chat">' +
         '<header><div class="brand">' + STAR + '<span class="name">assistant</span></div>' +
-        '<button class="close" aria-label="close chat">×</button></header>' +
+        '<div class="actions"><button class="new" type="button" aria-label="start a new chat">new chat</button>' +
+        '<button class="close" aria-label="close chat">×</button></div></header>' +
         '<div class="msgs" aria-live="polite"></div>' +
         '<form><input name="q" autocomplete="off" maxlength="1000" placeholder="ask a question…" aria-label="your question"/>' +
         '<button class="send" type="submit" aria-label="send">' + ARROW + '</button></form>' +
@@ -89,7 +95,19 @@
 
   var $ = function (s) { return shadow.querySelector(s); };
   var panel = $(".panel"), msgs = $(".msgs"), form = $("form"), input = $("input"), send = $(".send");
-  var history = [], busy = false, greeted = false;
+  var busy = false, greeted = false;
+
+  // localStorage can throw (privacy mode, blocked storage): the widget still works, just forgets on reload
+  var KEY = "botforge:" + BOT + ":";
+  function load(k) { try { return localStorage.getItem(KEY + k); } catch (e) { return null; } }
+  function save(k, v) { try { v == null ? localStorage.removeItem(KEY + k) : localStorage.setItem(KEY + k, v); } catch (e) {} }
+  function randomId() {
+    var a = new Uint8Array(16); (window.crypto || window.msCrypto).getRandomValues(a);
+    return "v_" + Array.prototype.map.call(a, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+  }
+  var visitorId = load("visitor");
+  if (!visitorId || !/^[A-Za-z0-9_-]{8,64}$/.test(visitorId)) { visitorId = randomId(); save("visitor", visitorId); }
+  var conversationId = load("conversation");
 
   function add(cls, text) {
     var d = document.createElement("div");
@@ -98,7 +116,26 @@
   }
   function toggle(open) {
     panel.classList.toggle("open", open);
-    if (open) { input.focus(); if (!greeted) { greeted = true; add("bot", info.greeting); } }
+    if (open) { input.focus(); if (!greeted) { greeted = true; restore(); } }
+  }
+
+  // show the previous conversation (if any) after a reload; fall back to the greeting
+  function restore() {
+    if (!conversationId) { add("bot", info.greeting); return; }
+    fetch(API + "/public/bots/" + encodeURIComponent(BOT) + "/conversations/" + encodeURIComponent(conversationId) +
+          "?visitor_id=" + encodeURIComponent(visitorId))
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (j) {
+        add("bot", info.greeting);
+        j.messages.forEach(function (m) { add(m.role === "user" ? "user" : "bot", m.content); });
+      })
+      .catch(function () { conversationId = null; save("conversation", null); add("bot", info.greeting); });
+  }
+
+  function newChat() {
+    if (busy) return;
+    conversationId = null; save("conversation", null);
+    msgs.innerHTML = ""; add("bot", info.greeting); input.focus();
   }
 
   var info = { name: "assistant", greeting: "hi! ask me anything." };
@@ -110,6 +147,7 @@
 
   $(".launcher").addEventListener("click", function () { toggle(!panel.classList.contains("open")); });
   $(".close").addEventListener("click", function () { toggle(false); });
+  $(".new").addEventListener("click", newChat);
 
   form.addEventListener("submit", async function (e) {
     e.preventDefault();
@@ -122,7 +160,7 @@
     try {
       var res = await fetch(API + "/public/bots/" + encodeURIComponent(BOT) + "/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: q, history: history.slice(-10) }),
+        body: JSON.stringify({ message: q, conversation_id: conversationId, visitor_id: visitorId }),
       });
       if (!res.ok) throw new Error(res.status === 403 ? "this site isn't allowed to use this bot." : "something went wrong (" + res.status + ").");
       var reader = res.body.getReader(), dec = new TextDecoder(), buf = "";
@@ -133,13 +171,13 @@
         for (var i = 0; i < frames.length; i++) {
           var line = frames[i].replace(/^data: /, ""); if (!line) continue;
           var ev = JSON.parse(line);
-          if (ev.type === "token") {
+          if (ev.type === "meta") { conversationId = ev.conversation_id; save("conversation", conversationId); }
+          else if (ev.type === "token") {
             if (!answer) { bubble.className = "msg bot"; bubble.textContent = ""; }
             answer += ev.text; bubble.textContent = answer; msgs.scrollTop = msgs.scrollHeight;
           } else if (ev.type === "error") { throw new Error("the assistant is unavailable right now."); }
         }
       }
-      history.push({ role: "user", content: q }, { role: "assistant", content: answer });
     } catch (err) {
       bubble.remove(); add("err", err.message || "network error");
     } finally { busy = false; send.disabled = false; input.focus(); }

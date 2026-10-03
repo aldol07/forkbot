@@ -59,7 +59,8 @@ def test_chat_streams_grounded_answer(client):
     r = client.post(f"/api/bots/{bot['id']}/chat", json={"message": "How long does express shipping take?", "provider": "mock"})
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
     ev = sse_events(r.text)
-    assert ev[0]["type"] == "sources" and ev[0]["items"]
+    assert ev[0]["type"] == "meta" and ev[0]["conversation_id"]
+    assert ev[1]["type"] == "sources" and ev[1]["items"]
     answer = "".join(e["text"] for e in ev if e["type"] == "token")
     assert "Express" in answer
     done = ev[-1]
@@ -78,3 +79,16 @@ def test_providers_listing(client):
     names = {p["name"]: p for p in client.get("/api/providers").json()}
     assert set(names) == {"groq", "openai", "gemini", "ollama", "mock"}
     assert names["mock"]["configured"] and names["mock"]["is_default"]
+
+
+def test_bot_names_are_unique_per_account(client):
+    signup(client)
+    assert client.post("/api/bots", json={"name": "ese"}).status_code == 201
+    r = client.post("/api/bots", json={"name": " ESE "})
+    assert r.status_code == 409 and "already" in r.json()["detail"]
+    other = client.post("/api/bots", json={"name": "other"}).json()
+    assert client.patch(f"/api/bots/{other['id']}", json={"name": "Ese"}).status_code == 409
+    assert client.patch(f"/api/bots/{other['id']}", json={"name": "other"}).status_code == 200  # keeping its own name is fine
+    client.cookies.clear()
+    signup(client, "b@example.com")
+    assert client.post("/api/bots", json={"name": "ese"}).status_code == 201  # other accounts may reuse it

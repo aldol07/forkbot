@@ -55,7 +55,10 @@ export default function Home() {
           </div>
         </section>
       </main>
-      <footer className="container footer">botforge · fastapi · next.js · pgvector</footer>
+      <footer className="container footer spread">
+        <span>botforge · built by <b>aldol</b></span>
+        <a className="btn ghost sm" href="mailto:dubeykartikay13@gmail.com?subject=botforge">contact</a>
+      </footer>
     </>
   );
 }

@@ -1,65 +1,90 @@
 "use client";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Arrow } from "@/components/icons";
-import { api, Bot, Provider, Source, streamChat } from "@/lib/api";
+import Sources from "@/components/bot/Sources";
+import { api, Bot, Conversation, fmtTime, Source, StoredMessage, streamChat } from "@/lib/api";
 
-type Msg = { role: "user" | "assistant" | "error"; content: string; sources?: Source[]; meta?: { provider: string; model: string; first_token_ms: number | null; total_ms: number; retrieval_ms: number } };
+type Meta = { provider: string | null; model: string | null; grounded?: boolean; first_token_ms: number | null; total_ms: number | null };
+type Msg = { role: "user" | "assistant" | "error"; content: string; sources?: Source[]; meta?: Meta };
 
-export default function ChatTab({ bot }: { bot: Bot }) {
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [provider, setProvider] = useState(bot.llm_provider ?? "");
-  const [model, setModel] = useState("");
+const fromStored = (m: StoredMessage): Msg => ({
+  role: m.role, content: m.content, sources: m.sources,
+  meta: m.role === "assistant"
+    ? { provider: m.provider, model: m.model, grounded: !!m.provider, first_token_ms: m.first_token_ms, total_ms: m.total_ms }
+    : undefined,
+});
+
+/** Private test chat. Answers come from the bot's documents through its configured provider;
+ *  every chat is saved, and earlier dashboard chats can be picked up again. */
+export default function ChatTab({ bot, initialConversationId }: { bot: Bot; initialConversationId?: string | null }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null); // server keeps the history
+  const [recent, setRecent] = useState<Conversation[]>([]);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const box = useRef<HTMLDivElement>(null);
   const abort = useRef<AbortController | null>(null);
 
-  useEffect(() => { api<Provider[]>("/providers").then(setProviders).catch(() => {}); }, []);
+  const loadRecent = useCallback(() =>
+    api<Conversation[]>(`/bots/${bot.id}/conversations?source=dashboard&limit=30`).then(setRecent).catch(() => {}), [bot.id]);
+
+  const open = useCallback(async (cid: string | null) => {
+    abort.current?.abort();
+    setError("");
+    if (!cid) { setConversationId(null); setMsgs([]); return; }
+    try {
+      const d = await api<{ messages: StoredMessage[] }>(`/bots/${bot.id}/conversations/${cid}`);
+      setConversationId(cid); setMsgs(d.messages.map(fromStored));
+    } catch (e) { setError((e as Error).message); }
+  }, [bot.id]);
+
+  useEffect(() => { loadRecent(); }, [loadRecent]);
+  useEffect(() => { if (initialConversationId) open(initialConversationId); }, [initialConversationId, open]);
   useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight }); }, [msgs]);
   useEffect(() => () => abort.current?.abort(), []);
-
-  const current = providers.find((p) => p.name === (provider || providers.find((x) => x.is_default)?.name));
 
   async function send(e: FormEvent) {
     e.preventDefault();
     const message = q.trim();
     if (!message || busy) return;
-    const history = msgs.filter((m) => m.role !== "error").map(({ role, content }) => ({ role, content }));
     setQ(""); setBusy(true);
     setMsgs((m) => [...m, { role: "user", content: message }, { role: "assistant", content: "" }]);
     const patch = (fn: (last: Msg) => Msg) => setMsgs((m) => [...m.slice(0, -1), fn(m[m.length - 1])]);
     abort.current = new AbortController();
     try {
-      await streamChat(`/bots/${bot.id}/chat`, { message, history, provider: provider || null, model: model || null }, (ev) => {
-        if (ev.type === "token") patch((l) => ({ ...l, content: l.content + ev.text }));
+      await streamChat(`/bots/${bot.id}/chat`, { message, conversation_id: conversationId }, (ev) => {
+        if (ev.type === "meta") setConversationId(ev.conversation_id);
+        else if (ev.type === "token") patch((l) => ({ ...l, content: l.content + ev.text }));
         else if (ev.type === "sources") patch((l) => ({ ...l, sources: ev.items }));
         else if (ev.type === "done") patch((l) => ({ ...l, meta: ev }));
         else if (ev.type === "error") patch(() => ({ role: "error", content: ev.message }));
       }, abort.current.signal);
     } catch (err) {
-      patch(() => ({ role: "error", content: (err as Error).message }));
-    } finally { setBusy(false); }
+      if ((err as Error).name !== "AbortError") patch(() => ({ role: "error", content: (err as Error).message }));
+    } finally { setBusy(false); loadRecent(); }
   }
 
   return (
     <div className="card chat">
       <div className="chat-bar">
-        <label className="hint" htmlFor="prov">provider</label>
-        <select id="prov" className="select" style={{ width: 190, height: 40 }} value={provider} onChange={(e) => { setProvider(e.target.value); setModel(""); }}>
-          <option value="">bot default{bot.llm_provider ? ` (${bot.llm_provider})` : ""}</option>
-          {providers.map((p) => (
-            <option key={p.name} value={p.name} disabled={!p.configured}>{p.name}{p.configured ? "" : " · no key"}</option>
+        <label className="hint" htmlFor="conv">conversation</label>
+        <select id="conv" className="select" style={{ width: 340, maxWidth: "100%", height: 40 }} disabled={busy}
+          value={conversationId ?? ""} onChange={(e) => open(e.target.value || null)}>
+          <option value="">new conversation</option>
+          {conversationId && !recent.some((c) => c.id === conversationId) && <option value={conversationId}>current conversation</option>}
+          {recent.map((c) => (
+            <option key={c.id} value={c.id}>{(c.title || "(untitled)").slice(0, 48)} · {fmtTime(c.last_message_at)}</option>
           ))}
         </select>
-        <input className="input" style={{ width: 230, height: 40 }} placeholder={current ? current.default_model : "model"} aria-label="model override" value={model} onChange={(e) => setModel(e.target.value)} />
         <span style={{ flex: 1 }} />
-        <button className="btn ghost sm" onClick={() => setMsgs([])} disabled={busy || !msgs.length}>clear</button>
+        <button className="btn ghost sm" onClick={() => open(null)} disabled={busy || !msgs.length}>new chat</button>
       </div>
+      {error && <p className="error-text" role="alert" style={{ margin: "8px 16px 0" }}>{error}</p>}
 
       <div className="chat-msgs" ref={box} aria-live="polite">
         {msgs.length === 0 && (
-          <div className="bubble bot">{bot.greeting}<div className="hint" style={{ marginTop: 6 }}>this is a private test chat. switch providers above to compare answers and latency.</div></div>
+          <div className="bubble bot">{bot.greeting}<div className="hint" style={{ marginTop: 6 }}>a private test chat. answers come only from this bot&apos;s documents; questions they don&apos;t cover are declined.</div></div>
         )}
         {msgs.map((m, i) =>
           m.role === "user" ? <div key={i} className="bubble user">{m.content}</div>
@@ -69,24 +94,17 @@ export default function ChatTab({ bot }: { bot: Bot }) {
               {m.content || <span className="typing"><span /><span /><span /></span>}
               {m.meta && (
                 <div className="meta">
-                  <span className="chip ok">{m.meta.provider}</span>
-                  <span className="chip plain">{m.meta.model}</span>
-                  <span className="chip plain">first token {m.meta.first_token_ms ?? "–"} ms</span>
-                  <span className="chip plain">total {m.meta.total_ms} ms</span>
+                  {m.meta.first_token_ms != null && <span className="chip plain">first token {m.meta.first_token_ms} ms</span>}
+                  {m.meta.total_ms != null && <span className="chip plain">total {m.meta.total_ms} ms</span>}
                 </div>
               )}
-              {!!m.sources?.length && (
-                <details className="sources">
-                  <summary>{m.sources.length} source{m.sources.length > 1 ? "s" : ""}</summary>
-                  <ol>{m.sources.map((s) => <li key={s.n}><b>{s.filename}</b>: {s.snippet.replace(/\s+/g, " ")}…</li>)}</ol>
-                </details>
-              )}
+              {!!m.sources?.length && <Sources items={m.sources} />}
             </div>
           ))}
       </div>
 
       <form className="chat-form" onSubmit={send}>
-        <input className="input" placeholder={bot.n_documents ? "ask something about your documents…" : "upload a document first, or just say hi…"} aria-label="message" maxLength={2000} value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" placeholder={bot.n_documents ? "ask something about your documents…" : "upload a document first…"} aria-label="message" maxLength={2000} value={q} onChange={(e) => setQ(e.target.value)} />
         <button className="send" aria-label="send" disabled={busy || !q.trim()}><Arrow /></button>
       </form>
     </div>

@@ -17,7 +17,8 @@ SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 def owner_chat(body: ChatRequest, bot: Bot = Depends(owned_bot)):
     """Dashboard test chat. `provider`/`model` in the body override the bot's settings."""
     return StreamingResponse(
-        chat_stream(bot.id, body.message, body.history, body.provider, body.model),
+        chat_stream(bot.id, body.message, conversation_id=body.conversation_id, source="dashboard",
+                    provider=body.provider, model=body.model),
         media_type="text/event-stream", headers=SSE_HEADERS)
 
 

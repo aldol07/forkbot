@@ -26,18 +26,37 @@ class Settings(BaseSettings):
 
     default_llm_provider: str = "groq"
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"
     ollama_base_url: str = "http://localhost:11434/v1"
     ollama_model: str = "llama3.2"
 
-    max_upload_mb: int = 10
-    chunk_size: int = 800
-    chunk_overlap: int = 120
-    retrieval_k: int = 6
+    # original uploads: "local" (dev) or "s3" (Supabase Storage / R2 / MinIO via the S3 API)
+    storage_backend: str = "local"
+    storage_dir: str = str(ROOT / "storage")
+    s3_endpoint: str = ""  # Supabase: https://<ref>.storage.supabase.co/storage/v1/s3
+    s3_region: str = "us-east-1"
+    s3_bucket: str = "documents"
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+
+    max_upload_mb: int = 25
+    max_docs_per_bot: int = 20
+    max_storage_mb_per_user: int = 50
+    chunk_size: int = 1200
+    chunk_overlap: int = 200
+    retrieval_k: int = 6           # max chunks sent to the LLM
+    reranker: str = "cross-encoder"  # cross-encoder | none (none also disables the grounding gate)
+    reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+    rerank_candidates: int = 10    # fused candidates scored by the cross-encoder (CPU cost grows with this)
+    rerank_max_chars: int = 1000
+    rerank_min_score: float = -2.0  # below this a chunk is "not about the question"; see services/rerank.py
+    api_docs: bool = False         # expose /docs and /openapi.json (handy locally, off by default)
+    history_turns: int = 10        # prior messages sent to the LLM
+    chat_retention_days: int = 90  # widget conversations older than this are purged
 
 
 @lru_cache

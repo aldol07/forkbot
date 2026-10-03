@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { api, PUBLIC_API } from "@/lib/api";
+import { api } from "@/lib/api";
 import { Arrow, Star } from "./icons";
 
 export default function Nav({ signedIn }: { signedIn: boolean }) {
@@ -17,13 +17,11 @@ export default function Nav({ signedIn }: { signedIn: boolean }) {
             {signedIn ? (
               <>
                 <Link href="/bots" className={path.startsWith("/bots") ? "active" : ""}>bots</Link>
-                <a href={`${PUBLIC_API}/docs`} target="_blank" rel="noreferrer" className="hide-sm">api</a>
                 <button onClick={logout}>sign out</button>
               </>
             ) : (
               <>
                 <a href="#how" className="hide-sm">how it works</a>
-                <a href={`${PUBLIC_API}/docs`} target="_blank" rel="noreferrer" className="hide-sm">api</a>
                 <Link href="/login" className={path === "/login" ? "active" : ""}>sign in</Link>
               </>
             )}

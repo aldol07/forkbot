@@ -2,6 +2,8 @@ from app.routers.public import host_allowed, origin_host
 from conftest import signup, sse_events
 from test_bots_and_chat import make_bot_with_doc
 
+V = {"visitor_id": "visitor-aaaa1111"}
+
 
 def test_host_matching():
     assert host_allowed("localhost", ["localhost"])
@@ -27,15 +29,15 @@ def test_widget_flow_and_allow_list(client):
     pre = client.options(f"/public/bots/{pid}/chat", headers={**ok, "Access-Control-Request-Method": "POST"})
     assert pre.status_code == 204
 
-    r = client.post(f"/public/bots/{pid}/chat", json={"message": "what is the refund window?"}, headers=ok)
+    r = client.post(f"/public/bots/{pid}/chat", json={"message": "what is the refund window?", **V}, headers=ok)
     assert r.status_code == 200
     assert "30 days" in "".join(e.get("text", "") for e in sse_events(r.text))
 
     bad = {"Origin": "https://evil.example"}
-    assert client.post(f"/public/bots/{pid}/chat", json={"message": "hi"}, headers=bad).status_code == 403
-    assert "access-control-allow-origin" not in client.post(f"/public/bots/{pid}/chat", json={"message": "hi"}, headers=bad).headers
+    assert client.post(f"/public/bots/{pid}/chat", json={"message": "hi", **V}, headers=bad).status_code == 403
+    assert "access-control-allow-origin" not in client.post(f"/public/bots/{pid}/chat", json={"message": "hi", **V}, headers=bad).headers
     assert client.options(f"/public/bots/{pid}/chat", headers=bad).status_code == 403
-    assert client.post(f"/public/bots/{pid}/chat", json={"message": "hi"}).status_code == 403  # no Origin
+    assert client.post(f"/public/bots/{pid}/chat", json={"message": "hi", **V}).status_code == 403  # no Origin
     assert client.get("/public/bots/bot_doesnotexist", headers=ok).status_code == 404
 
 
@@ -44,7 +46,7 @@ def test_widget_cannot_override_provider(client):
     bot = make_bot_with_doc(client)
     client.cookies.clear()
     r = client.post(f"/public/bots/{bot['public_id']}/chat",
-                    json={"message": "refund?", "provider": "openai"}, headers={"Origin": "http://localhost"})
+                    json={"message": "refund?", "provider": "openai", **V}, headers={"Origin": "http://localhost"})
     assert sse_events(r.text)[-1]["provider"] == "mock"
 
 

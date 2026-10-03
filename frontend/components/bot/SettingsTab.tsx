@@ -58,21 +58,6 @@ export default function SettingsTab({ bot, onSaved }: { bot: Bot; onSaved: (b: B
       </form>
       <div className="stack">
         <div className="card">
-          <h2 className="h2">providers on this server</h2>
-          <table className="table">
-            <tbody>
-              {providers.map((p) => (
-                <tr key={p.name}>
-                  <td style={{ fontWeight: 600 }}>{p.name}{p.is_default && <span className="hint"> · default</span>}</td>
-                  <td className="mono">{p.default_model}</td>
-                  <td><span className={`chip ${p.configured ? "ok" : "err"}`}>{p.configured ? "ready" : "no key"}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="hint" style={{ marginBottom: 0 }}>add keys in <span className="mono">botforge/.env</span> and restart the api.</p>
-        </div>
-        <div className="card">
           <h2 className="h2">danger zone</h2>
           <button className="btn danger" onClick={remove}>delete this bot</button>
         </div>

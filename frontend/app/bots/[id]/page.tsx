@@ -6,11 +6,12 @@ import Nav from "@/components/Nav";
 import ChatTab from "@/components/bot/ChatTab";
 import DocumentsTab from "@/components/bot/DocumentsTab";
 import EmbedTab from "@/components/bot/EmbedTab";
+import HistoryTab from "@/components/bot/HistoryTab";
 import SettingsTab from "@/components/bot/SettingsTab";
 import { api, Bot } from "@/lib/api";
 import { useUser } from "@/lib/useUser";
 
-const TABS = ["documents", "chat", "embed", "settings"] as const;
+const TABS = ["documents", "chat", "history", "embed", "settings"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function BotPage() {
@@ -19,6 +20,7 @@ export default function BotPage() {
   const [bot, setBot] = useState<Bot | null>(null);
   const [tab, setTab] = useState<Tab>("documents");
   const [error, setError] = useState("");
+  const [resume, setResume] = useState<string | null>(null); // conversation picked in history → continued in chat
 
   const reload = useCallback(() => api<Bot>(`/bots/${id}`).then(setBot).catch((e) => setError(e.message)), [id]);
   useEffect(() => { if (user) reload(); }, [user, reload]);
@@ -43,11 +45,12 @@ export default function BotPage() {
             </div>
             <div className="tabs" role="tablist">
               {TABS.map((t) => (
-                <button key={t} role="tab" aria-selected={tab === t} className="tab" onClick={() => pick(t)}>{t}</button>
+                <button key={t} role="tab" aria-selected={tab === t} className="tab" onClick={() => { setResume(null); pick(t); }}>{t}</button>
               ))}
             </div>
             {tab === "documents" && <DocumentsTab bot={bot} onChange={reload} />}
-            {tab === "chat" && <ChatTab bot={bot} />}
+            {tab === "chat" && <ChatTab bot={bot} initialConversationId={resume} />}
+            {tab === "history" && <HistoryTab bot={bot} onContinue={(cid) => { setResume(cid); pick("chat"); }} />}
             {tab === "embed" && <EmbedTab bot={bot} onSaved={setBot} />}
             {tab === "settings" && <SettingsTab bot={bot} onSaved={setBot} />}
           </>

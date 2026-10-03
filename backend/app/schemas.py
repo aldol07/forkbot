@@ -80,27 +80,63 @@ class DocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     filename: str
+    content_type: str | None
     size_bytes: int
     status: str
     error: str | None
+    n_pages: int
     n_chunks: int
+    has_file: bool
     created_at: datetime
-
-
-class ChatTurn(BaseModel):
-    role: str = Field(pattern="^(user|assistant)$")
-    content: str = Field(max_length=4000)
 
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
-    history: list[ChatTurn] = Field(default_factory=list, max_length=20)
+    conversation_id: uuid.UUID | None = None  # omit to start a new conversation
     provider: str | None = None  # per-request override, for testing providers
     model: str | None = Field(default=None, max_length=100)
 
     _p = field_validator("provider")(_check_provider)
 
 
+VISITOR_ID = r"^[A-Za-z0-9_-]{8,64}$"
+
+
 class PublicChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
-    history: list[ChatTurn] = Field(default_factory=list, max_length=10)
+    conversation_id: uuid.UUID | None = None
+    visitor_id: str = Field(pattern=VISITOR_ID)  # random id the widget keeps in localStorage
+
+
+class ConversationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    source: str
+    title: str
+    created_at: datetime
+    last_message_at: datetime
+    n_messages: int = 0
+
+
+class MessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    role: str
+    content: str
+    sources: list[dict]
+    provider: str | None
+    model: str | None
+    first_token_ms: int | None
+    total_ms: int | None
+    created_at: datetime
+
+
+class ConversationDetail(BaseModel):
+    conversation: ConversationOut
+    messages: list[MessageOut]
+
+
+class PublicMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    role: str
+    content: str

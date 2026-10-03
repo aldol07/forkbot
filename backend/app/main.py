@@ -1,31 +1,54 @@
 """BotForge API entrypoint:  uvicorn app.main:app --reload"""
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 
 from .config import get_settings
 from .db import init_db
-from .routers import auth, bots, chat, documents, public
+from .routers import auth, bots, chat, conversations, documents, public
+from .services.chat import purge_old_conversations
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("botforge")
 STATIC = Path(__file__).parent / "static"
+
+
+async def retention_loop():
+    """Purge old widget conversations at startup and then once a day."""
+    while True:
+        try:
+            n = await run_in_threadpool(purge_old_conversations)
+            if n:
+                log.info("retention: purged %d old widget conversations", n)
+        except Exception:  # noqa: BLE001: never let housekeeping take the API down
+            log.exception("retention purge failed")
+        await asyncio.sleep(24 * 3600)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     s = get_settings()
     if s.jwt_secret.startswith("dev-insecure") or s.jwt_secret.startswith("change-me"):
-        logging.getLogger("botforge").warning("JWT_SECRET is not set: fine for local dev only")
+        log.warning("JWT_SECRET is not set: fine for local dev only")
     init_db()
+    task = asyncio.create_task(retention_loop())
     yield
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
 
 
-app = FastAPI(title="BotForge API", version="0.1.0", lifespan=lifespan)
+_docs = get_settings().api_docs  # interactive API docs are opt-in (API_DOCS=true), off in production
+app = FastAPI(title="BotForge API", version="0.1.0", lifespan=lifespan,
+              docs_url="/docs" if _docs else None, redoc_url=None,
+              openapi_url="/openapi.json" if _docs else None)
 
-for r in (auth.router, bots.router, documents.router, chat.router, public.router):
+for r in (auth.router, bots.router, documents.router, chat.router, conversations.router, public.router):
     app.include_router(r)
 
 

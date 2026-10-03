@@ -16,9 +16,11 @@ WORKDIR /home/user/app
 COPY --chown=user requirements.txt .
 RUN pip install --user -r requirements.txt
 
-# Bake the embedding model into the image so cold starts don't re-download ~130 MB.
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/home/user/.cache/fastembed')"
+# Bake the embedding (~130 MB) and re-ranker (~80 MB) models into the image so cold starts download nothing.
+RUN python -c "from fastembed import TextEmbedding; from fastembed.rerank.cross_encoder import TextCrossEncoder; c = '/home/user/.cache/fastembed'; TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir=c); TextCrossEncoder('Xenova/ms-marco-MiniLM-L-6-v2', cache_dir=c)"
 
+COPY --chown=user alembic.ini ./
+COPY --chown=user migrations ./migrations
 COPY --chown=user app ./app
 
 EXPOSE 7860

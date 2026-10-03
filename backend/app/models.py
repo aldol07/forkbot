@@ -1,11 +1,14 @@
-"""ORM models. owner_id is denormalised onto every tenant row (ready for RLS in phase 2)."""
+"""ORM models. owner_id is denormalised onto every tenant row (ready for RLS in phase 2).
+
+Schema changes go through Alembic migrations in ../migrations, not create_all.
+"""
 import secrets
 import uuid
 from datetime import datetime, timezone
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Computed, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR, UUID
+from sqlalchemy import BigInteger, Computed, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .config import get_settings
@@ -50,13 +53,22 @@ class Document(Base):
     bot_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("bots.id", ondelete="CASCADE"), index=True)
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)  # None = uploaded before file storage
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|processing|ready|failed
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    n_pages: Mapped[int] = mapped_column(Integer, default=0)
     n_chunks: Mapped[int] = mapped_column(Integer, default=0)
+    n_images: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     bot: Mapped[Bot] = relationship(back_populates="documents")
+
+    @property
+    def has_file(self) -> bool:
+        return self.storage_key is not None
 
 
 class Chunk(Base):
@@ -66,6 +78,39 @@ class Chunk(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
     ord: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(10), default="text")  # text|image
+    page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    section: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    image_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     content: Mapped[str] = mapped_column(Text)
     embedding = mapped_column(Vector(get_settings().embedding_dim))
     tsv = mapped_column(TSVECTOR, Computed("to_tsvector('english', content)", persisted=True))
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    bot_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("bots.id", ondelete="CASCADE"), index=True)
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    source: Mapped[str] = mapped_column(String(10))  # dashboard|widget
+    visitor_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    title: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_message_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
+    bot_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("bots.id", ondelete="CASCADE"), index=True)
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(10))  # user|assistant
+    content: Mapped[str] = mapped_column(Text)
+    rewritten_query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sources: Mapped[list] = mapped_column(JSONB, default=list)
+    provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    first_token_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
