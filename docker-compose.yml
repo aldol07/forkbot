@@ -1,0 +1,18 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: botforge
+      POSTGRES_PASSWORD: botforge
+      POSTGRES_DB: botforge
+    ports: ["5433:5432"]   # 5433 so it won't clash with a local Postgres
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U botforge"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ["6380:6379"]
+volumes:
+  pgdata:

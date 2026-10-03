@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>widget demo · botforge</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap">
+<style>
+ body{margin:0;min-height:100vh;font-family:Manrope,system-ui,sans-serif;color:#111;background:#F2EDDF;
+  background-image:radial-gradient(rgba(20,20,20,.28) 1.2px,transparent 1.3px);background-size:64px 64px}
+ main{max-width:760px;margin:0 auto;padding:120px 24px}
+ p{color:#5E5B53;font-size:18px} h1{font-size:56px;line-height:1.05;letter-spacing:-.02em;margin:.2em 0}
+ code{font-family:ui-monospace,monospace;background:#F8F4EA;border:1px solid rgba(17,17,17,.16);padding:2px 6px;border-radius:4px}
+</style></head>
+<body><main>
+ <p>a pretend customer website</p>
+ <h1>acme widgets co.</h1>
+ <p>open the chat in the corner. this page loads the bot from <code>?bot=</code> in the url.</p>
+</main>
+<script>
+ (function(){var id=new URLSearchParams(location.search).get("bot");
+  if(!id){document.querySelector("main").insertAdjacentHTML("beforeend","<p><b>add ?bot=bot_xxx to the url</b></p>");return;}
+  var s=document.createElement("script");s.src="/widget.js";s.async=true;s.setAttribute("data-bot-id",id);s.setAttribute("data-open","true");
+  document.body.appendChild(s);})();
+</script>
+</body></html>
