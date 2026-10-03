@@ -52,11 +52,36 @@ def test_on_topic_question_uses_only_relevant_chunks(client, gate):
     assert ev[-1]["grounded"] is True and "Express" in answer
 
 
-def test_follow_up_retries_retrieval_with_the_previous_question(client, gate):
+def test_follow_up_is_rewritten_into_a_standalone_query(client, gate, monkeypatch):
+    seen = []
+
+    def fake_rewrite(spec, model, history, message):
+        seen.append((history[-2].content, message))
+        return "why does express shipping take 2 days"
+
+    monkeypatch.setattr(chat_service, "rewrite_query", fake_rewrite)
     signup(client)
     bot = make_bot_with_doc(client)
     ev, _ = ask(client, bot, "how long does express shipping take?")
-    ev2, answer = ask(client, bot, "and why?", cid=ev[0]["conversation_id"])  # matches nothing on its own
+    cid = ev[0]["conversation_id"]
+    ev2, answer = ask(client, bot, "and why?", cid=cid)  # matches nothing on its own
+    assert seen == [("how long does express shipping take?", "and why?")]
+    assert answer != NOT_FOUND and next(e for e in ev2 if e["type"] == "sources")["items"]
+    msgs = client.get(f"/api/bots/{bot['id']}/conversations/{cid}").json()["messages"]
+    assert msgs[2]["content"] == "and why?"  # the transcript keeps what the user typed
+
+
+def test_follow_up_falls_back_to_previous_question_when_rewrite_fails(client, gate, monkeypatch):
+    from app.llm.providers import ProviderError
+
+    def broken(*a, **k):
+        raise ProviderError("rate limited")
+
+    monkeypatch.setattr(chat_service, "rewrite_query", broken)
+    signup(client)
+    bot = make_bot_with_doc(client)
+    ev, _ = ask(client, bot, "how long does express shipping take?")
+    ev2, answer = ask(client, bot, "and why?", cid=ev[0]["conversation_id"])
     assert answer != NOT_FOUND and next(e for e in ev2 if e["type"] == "sources")["items"]
 
 
@@ -86,3 +111,24 @@ def test_what_can_you_do_describes_the_bot_without_llm(client, gate, monkeypatch
     monkeypatch.setattr(chat_service, "stream_chat", lambda *a, **k: pytest.fail("LLM must not be called"))
     _, answer = ask(client, bot, "what does this bot can do?")
     assert bot["name"] in answer and "faq" in answer and "isn't covered" in answer
+
+
+def test_rate_limited_provider_falls_back(client, monkeypatch):
+    from app.llm.providers import ProviderError, ProviderSpec
+    calls = []
+
+    def fake_stream(spec, model, messages):
+        calls.append(spec.name)
+        if spec.name == "groq":
+            raise ProviderError("groq: Error code: 429 - rate limit reached")
+        yield "Express takes 2 days [1]."
+
+    monkeypatch.setattr(chat_service, "stream_chat", fake_stream)
+    monkeypatch.setattr(chat_service, "resolve", lambda p, m: (ProviderSpec("groq", None, "k", "gpt-oss"), "gpt-oss"))
+    monkeypatch.setattr(chat_service, "provider_specs",
+                        lambda: {"gemini": ProviderSpec("gemini", None, "k", "flash-lite")})
+    signup(client)
+    bot = make_bot_with_doc(client)
+    ev, answer = ask(client, bot, "how long does express shipping take?")
+    assert calls == ["groq", "gemini"] and answer == "Express takes 2 days [1]."
+    assert ev[-1]["provider"] == "gemini"

@@ -10,3 +10,4 @@ backend/scripts/out/
 test-docs/
 storage/
 *.tsbuildinfo
+backend/eval/*.jsonl

@@ -5,8 +5,9 @@ The score does two jobs:
 2. grounding gate: chunks below RERANK_MIN_SCORE are dropped, and if none survive the bot
    refuses without calling the LLM, so it never "answers" from the model's general knowledge.
 
-Calibrated on the nextias test docs (ms-marco-MiniLM-L-6-v2): answerable questions scored
-+2.6 to +9.8, off-topic ones -7.9 to -11.3; the default threshold (-2.0) sits in that gap.
+Calibrated with scripts/eval_retrieval.py on 60 answerable + 12 off-topic questions
+(ms-marco-MiniLM-L-6-v2): the highest off-topic score was -8.3; at -6.0 every off-topic question is
+refused and 5% of answerable ones are (hard paraphrases scoring below -7). -2.0 refused 8.3%.
 """
 import os
 from functools import lru_cache

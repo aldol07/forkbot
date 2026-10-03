@@ -157,9 +157,9 @@ matching `visitor_id`. Phase 2 adds Redis rate limits, since non-browser clients
 2. [~] **Object storage** (local backend done + tested; `s3` backend written, untested until Supabase S3 keys are added): `storage/` module with `local` and `s3` backends (`STORAGE_BACKEND`, `S3_ENDPOINT`, `S3_BUCKET`, keys); store originals; download / reindex / delete endpoints; per-user quota
 3. [x] **Page-aware parsing + chunking**: `page`, `section`, 1,200/200 chunks; Markdown heading split; citations show page
 4. [x] **Conversations + messages**: tables, server-owned history, `meta` SSE event, widget localStorage, dashboard history tab, retention job
-5. [ ] **Query rewriting** for follow-ups
+5. [x] **Query rewriting** for follow-ups (gpt-oss-20b, ~0.8 s, only when the chat has history; stored in `messages.rewritten_query`; falls back to previous question + message if the call fails)
 6. [x] **Re-ranker + relevance threshold** (MiniLM-L-6 cross-encoder on top-10 fused candidates + each search's top 3; gate at -2.0, calibrated: answerable +2.6…+9.8, off-topic −7.9…−11.3; no passing chunk → fixed refusal, LLM not called; small talk → greeting; follow-ups retry with the previous question until step 5 lands)
-7. [ ] **Retrieval eval**: `test-docs/` + `eval/questions.jsonl` (question → expected doc/page); report hit@6 and MRR for vector · hybrid · hybrid+rerank · +rewrite
+7. [x] **Retrieval eval**: `scripts/make_eval_set.py` (LLM-written, paraphrased question per page/section + 12 off-topic) → `scripts/eval_retrieval.py`. 60 answerable + 12 off-topic, k=6: vector hit@6 95.0% / MRR 0.762 · keyword 93.3% / 0.751 · hybrid 98.3% / 0.828 · hybrid+rerank (gate −6) 91.7% / **0.854**, 5% false refusals, **100% off-topic refused**, ~1.1 s. Gate moved −2 → −6 from this (−2 refused 8.3% of answerable). Eval set is generated from private test docs: git-ignored
 8. [ ] **Images**: image uploads, PDF image extraction, scanned-page rendering, vision captioning, thumbnails in source cards
 9. [~] **Supabase**: DB migrated (session pooler `aws-0-ap-southeast-1`, pgvector in `extensions`, RLS on every table → Data API returns `[]`); app runs locally against it. Still to do: private Storage bucket + S3 keys
 10. [ ] **Deploy**: HF Space (API) + Vercel (dashboard); smoke test against the checklist in §7
@@ -170,6 +170,7 @@ matching `visitor_id`. Phase 2 adds Redis rate limits, since non-browser clients
 3. Redis token-bucket rate limit + monthly message quota per tenant
 4. Analytics page from `messages`: volume, first-token p50/p95, top questions, "don't know" rate
 5. GitHub Actions: lint, pytest, retrieval-eval gate
+6. LLM fallback on rate limits is in (Groq free tier = 8k tokens/min ≈ 2–3 answers/min → Gemini); consider a paid tier or caching for real traffic
 
 ## 7. Running and testing locally
 
@@ -201,7 +202,7 @@ Put test files in `botforge/test-docs/` (git-ignored). Local stored files go to 
 | Bullet | Where it's proven | Number to measure |
 | --- | --- | --- |
 | Embeddable widget + domain allow-listing | `public.py`, `widget.js`, `test_public.py` | – |
-| Hybrid retrieval + re-ranking + query rewriting | `retrieval.py`, `eval/` | hit@6 / MRR gain `[X]%` on `[N]` questions |
+| Hybrid retrieval + re-ranking + query rewriting | `retrieval.py`, `scripts/eval_retrieval.py` | hybrid vs vector-only: hit@6 95.0→98.3%, MRR 0.762→0.828; re-rank MRR 0.854 with 100% off-topic refusal, on 72 questions |
 | Multimodal ingestion (OCR + image captioning) | `ingest.py`, vision provider | `[N]` image-only questions answered |
 | Persistent conversations, server-owned history | `conversations` / `messages`, history tab | – |
 | RLS isolation, quotas, rate limiting, Celery | phase 2 | first token `[X] ms` (p50 from `messages`) |

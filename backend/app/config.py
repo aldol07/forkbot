@@ -53,7 +53,9 @@ class Settings(BaseSettings):
     reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     rerank_candidates: int = 10    # fused candidates scored by the cross-encoder (CPU cost grows with this)
     rerank_max_chars: int = 1000
-    rerank_min_score: float = -2.0  # below this a chunk is "not about the question"; see services/rerank.py
+    rerank_min_score: float = -6.0  # below this a chunk is "not about the question"; see services/rerank.py
+    llm_fallback_provider: str = "gemini"  # used when the chosen provider is rate-limited (Groq free tier: 8k tokens/min)
+    rewrite_model: str = "openai/gpt-oss-20b"  # follow-up → standalone query (Groq); other providers use their chat model
     api_docs: bool = False         # expose /docs and /openapi.json (handy locally, off by default)
     history_turns: int = 10        # prior messages sent to the LLM
     chat_retention_days: int = 90  # widget conversations older than this are purged

@@ -16,9 +16,10 @@ from sqlalchemy import delete, select
 
 from ..config import get_settings
 from ..db import SessionLocal
-from ..llm.providers import ProviderError, resolve, stream_chat
+from ..llm.providers import ProviderError, provider_specs, resolve, stream_chat
 from ..models import Bot, Conversation, Document, Message
 from .retrieval import retrieve
+from .rewrite import rewrite_query
 
 BASE_PROMPT = (
     "You are {name}, an assistant that answers questions using ONLY the documents in <context>.\n"
@@ -151,7 +152,8 @@ def _chat_stream(db, bot_id, message, conversation_id, source, visitor_id, provi
     if not conv.title:
         conv.title = message[:120]
     conv.last_message_at = _now()
-    db.add(Message(conversation_id=conv.id, bot_id=bot.id, owner_id=bot.owner_id, role="user", content=message))
+    user_msg = Message(conversation_id=conv.id, bot_id=bot.id, owner_id=bot.owner_id, role="user", content=message)
+    db.add(user_msg)
     db.commit()
     yield sse({"type": "meta", "conversation_id": str(conv.id)})
 
@@ -162,13 +164,17 @@ def _chat_stream(db, bot_id, message, conversation_id, source, visitor_id, provi
         yield from _canned_reply(db, bot, conv, about_bot_reply(db, bot), t0)
         return
 
-    hits = retrieve(db, bot.id, message, k=s.retrieval_k)
-    if not hits:
-        # Follow-ups ("why is that?") often don't match any document on their own: retry with the
-        # previous question attached. (Proper LLM query rewriting is planned; this is the cheap fallback.)
-        prev = next((m.content for m in reversed(history) if m.role == "user"), None)
-        if prev:
-            hits = retrieve(db, bot.id, f"{prev}\n{message}", k=s.retrieval_k)
+    query = message
+    if history:  # follow-ups ("why is that?") are searched as a standalone query
+        try:
+            query = rewrite_query(spec, model_name, history, message)
+        except ProviderError:
+            prev = next((m.content for m in reversed(history) if m.role == "user"), "")
+            query = f"{prev}\n{message}".strip()  # cheap fallback: previous question + this one
+        if query != message:
+            user_msg.rewritten_query = query
+            db.commit()
+    hits = retrieve(db, bot.id, query, k=s.retrieval_k)
     retrieval_ms = round((time.perf_counter() - t0) * 1000)
     sources = [{"n": i, "filename": h.filename, "page": h.page, "section": h.section, "kind": h.kind,
                 "snippet": h.content[:240], "score": round(h.rerank_score if h.rerank_score is not None else h.score, 4)}
@@ -192,12 +198,21 @@ def _chat_stream(db, bot_id, message, conversation_id, source, visitor_id, provi
         db.commit()
 
     completed = False
+    llm_messages = build_messages(bot, hits, history, message)
     try:
-        for delta in tidy_answer(stream_chat(spec, model_name, build_messages(bot, hits, history, message)), len(hits)):
-            if first_token_ms is None:
-                first_token_ms = round((time.perf_counter() - t0) * 1000)
-            answer += delta
-            yield sse({"type": "token", "text": delta})
+        while True:
+            try:
+                for delta in tidy_answer(stream_chat(spec, model_name, llm_messages), len(hits)):
+                    if first_token_ms is None:
+                        first_token_ms = round((time.perf_counter() - t0) * 1000)
+                    answer += delta
+                    yield sse({"type": "token", "text": delta})
+                break
+            except ProviderError as e:
+                fallback = _rate_limit_fallback(spec, e, started=bool(answer))
+                if not fallback:
+                    raise
+                spec, model_name = fallback  # e.g. Groq free tier (8k tokens/min) exhausted → Gemini
         completed = True
     except ProviderError as e:
         yield sse({"type": "error", "message": str(e)})
@@ -210,6 +225,15 @@ def _chat_stream(db, bot_id, message, conversation_id, source, visitor_id, provi
     yield sse({"type": "done", "conversation_id": str(conv.id), "provider": spec.name, "model": model_name,
                "grounded": True,
                "retrieval_ms": retrieval_ms, "first_token_ms": first_token_ms, "total_ms": total_ms})
+
+
+def _rate_limit_fallback(spec, error: ProviderError, started: bool):
+    """(spec, model) of LLM_FALLBACK_PROVIDER if `error` is a rate limit hit before any token was sent."""
+    name = get_settings().llm_fallback_provider
+    if started or not name or name == spec.name or "429" not in str(error):
+        return None
+    fb = provider_specs().get(name)
+    return (fb, fb.default_model) if fb and fb.configured else None
 
 
 def _canned_reply(db, bot: Bot, conv: Conversation, text: str, t0: float, retrieval_ms: int | None = None):

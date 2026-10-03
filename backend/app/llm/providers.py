@@ -99,6 +99,22 @@ def stream_chat(spec: ProviderSpec, model: str, messages: list[dict]) -> Iterato
         raise ProviderError(f"{spec.name}: {getattr(e, 'message', None) or e}") from e
 
 
+def complete(spec: ProviderSpec, model: str, messages: list[dict], max_tokens: int = 300) -> str:
+    """One short non-streamed completion (used for query rewriting)."""
+    if spec.name == "mock":  # offline: echo the latest user message
+        return messages[-1]["content"].rsplit("Latest message:", 1)[-1].strip()
+    from openai import OpenAI, OpenAIError
+
+    client = OpenAI(api_key=spec.api_key, base_url=spec.base_url, timeout=20, max_retries=0)
+    extra = {"reasoning_effort": "low"} if spec.name == "groq" and "gpt-oss" in model else None
+    try:
+        r = client.chat.completions.create(model=model, messages=messages, temperature=0, max_tokens=max_tokens,
+                                           extra_body=extra)
+        return (r.choices[0].message.content or "").strip()
+    except OpenAIError as e:
+        raise ProviderError(f"{spec.name}: {getattr(e, 'message', None) or e}") from e
+
+
 def _mock_stream(messages: list[dict]) -> Iterator[str]:
     """Answer with the context sentences that best overlap the question."""
     system = messages[0]["content"] if messages and messages[0]["role"] == "system" else ""
