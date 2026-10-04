@@ -18,10 +18,11 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     frontend_origin: str = "http://localhost:3000"
 
-    embedding_provider: str = "fastembed"  # fastembed | openai | hash
-    embedding_model: str = "BAAI/bge-small-en-v1.5"
-    embedding_dim: int = 384
-    embedding_cache_dir: str = str(ROOT / ".cache" / "fastembed")  # not %TEMP%, which Windows cleans
+    embedding_provider: str = "gemini"  # gemini | openai | hash (tests); local fastembed is commented out
+    embedding_model: str = "gemini-embedding-001"
+    embedding_dim: int = 384             # must match chunks.embedding (migration 0001)
+    embedding_api_key: str = ""          # defaults to the provider's server key (GEMINI_API_KEY / OPENAI_API_KEY)
+    embedding_cache_dir: str = str(ROOT / ".cache" / "fastembed")  # only for the local models
 
     default_llm_provider: str = "groq"
     groq_api_key: str = ""
@@ -48,11 +49,12 @@ class Settings(BaseSettings):
     chunk_size: int = 1200
     chunk_overlap: int = 200
     retrieval_k: int = 6           # max chunks sent to the LLM
-    reranker: str = "cross-encoder"  # cross-encoder | none (none also disables the grounding gate)
+    reranker: str = "none"         # none | cross-encoder (local, commented out: see services/rerank.py)
     reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     rerank_candidates: int = 10    # fused candidates scored by the cross-encoder (CPU cost grows with this)
     rerank_max_chars: int = 1000
-    rerank_min_score: float = -6.0  # below this a chunk is "not about the question"; see services/rerank.py
+    rerank_min_score: float = -6.0  # cross-encoder gate threshold; see services/rerank.py
+    similarity_min: float = 0.56   # similarity gate (no re-ranker): closest chunk's cosine must reach this (eval-calibrated)
     llm_fallback_provider: str = "gemini"
     # Users can paste their own provider keys (bot settings tab). With SERVER_LLM_KEYS=false bots only ever
     # use those, so the keys in this .env are never spent on users' chats (the setting for a public deploy).

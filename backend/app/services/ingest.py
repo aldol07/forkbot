@@ -14,7 +14,8 @@ from ..db import SessionLocal
 from ..models import Chunk, Document
 from ..storage import get_storage
 from .chunking import chunk_text
-from .embeddings import get_embedder
+from .embeddings import embedder_for
+from .keys import load_user_keys
 from .parsing import extract_segments, file_kind
 
 log = logging.getLogger("forkbot.ingest")
@@ -39,7 +40,7 @@ def ingest_document(document_id: uuid.UUID, data: bytes | None = None) -> None:
             pieces = [(seg, c) for seg in segments for c in chunk_text(seg.text, s.chunk_size, s.chunk_overlap)]
             if not pieces:
                 raise ValueError("no extractable text (scanned PDF? image/OCR support is coming next)")
-            vectors = get_embedder().embed_documents([c for _, c in pieces])
+            vectors = embedder_for(load_user_keys(db, doc.owner_id)).embed_documents([c for _, c in pieces])
             t_embed = time.perf_counter()
             db.execute(delete(Chunk).where(Chunk.document_id == doc.id))
             # Core bulk insert (batched multi-row INSERTs, no per-object ORM work or RETURNING):

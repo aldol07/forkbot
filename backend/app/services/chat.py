@@ -18,6 +18,7 @@ from ..config import get_settings
 from ..db import SessionLocal
 from ..llm.providers import ProviderError, provider_specs, resolve, stream_chat
 from ..models import Bot, Conversation, Document, Message
+from .embeddings import EmbeddingQuotaError, embedder_for
 from .keys import load_user_keys
 from .retrieval import retrieve
 from .rewrite import rewrite_query
@@ -176,7 +177,12 @@ def _chat_stream(db, bot_id, message, conversation_id, source, visitor_id, provi
         if query != message:
             user_msg.rewritten_query = query
             db.commit()
-    hits = retrieve(db, bot.id, query, k=s.retrieval_k)
+    try:
+        hits = retrieve(db, bot.id, query, k=s.retrieval_k, embedder=embedder_for(user_keys))
+    except (EmbeddingQuotaError, RuntimeError) as e:  # embedding API down or out of quota
+        yield sse({"type": "error", "message": f"search is unavailable right now: {e}. "
+                   "Adding your own Gemini key in the bot's settings uses your quota instead."})
+        return
     retrieval_ms = round((time.perf_counter() - t0) * 1000)
     sources = [{"n": i, "filename": h.filename, "page": h.page, "section": h.section, "kind": h.kind,
                 "snippet": h.content[:240], "score": round(h.rerank_score if h.rerank_score is not None else h.score, 4)}

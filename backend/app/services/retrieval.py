@@ -1,5 +1,7 @@
-"""Hybrid retrieval: pgvector cosine + Postgres full-text → Reciprocal Rank Fusion → cross-encoder
-re-rank + relevance threshold (the grounding gate; see services/rerank.py)."""
+"""Hybrid retrieval: pgvector cosine + Postgres full-text → Reciprocal Rank Fusion → grounding gate.
+
+The gate is the cross-encoder threshold when a re-ranker is configured, otherwise the similarity
+gate: the closest chunk must reach SIMILARITY_MIN cosine similarity (see services/rerank.py)."""
 import uuid
 from dataclasses import dataclass
 
@@ -8,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..models import Chunk, Document
-from .embeddings import get_embedder
+from .embeddings import Embedder, get_embedder
 from .rerank import get_reranker
 
 RRF_K = 60
@@ -38,10 +40,11 @@ class Hit:
         return " · ".join(parts)
 
 
-def vector_search(db: Session, bot_id: uuid.UUID, qvec: list[float], k: int) -> list[int]:
-    q = (select(Chunk.id).where(Chunk.bot_id == bot_id)
-         .order_by(Chunk.embedding.cosine_distance(qvec)).limit(k))
-    return list(db.scalars(q))
+def vector_search(db: Session, bot_id: uuid.UUID, qvec: list[float], k: int) -> list[tuple[int, float]]:
+    """(chunk id, cosine similarity), closest first."""
+    dist = Chunk.embedding.cosine_distance(qvec)
+    q = select(Chunk.id, dist).where(Chunk.bot_id == bot_id).order_by(dist).limit(k)
+    return [(cid, 1.0 - d) for cid, d in db.execute(q)]
 
 
 # Chunks matching ANY query term, scored by the summed IDF (rarity within this bot) of the terms they
@@ -82,17 +85,20 @@ def rrf(rankings: list[list[int]], k: int = RRF_K) -> dict[int, float]:
 
 
 def retrieve(db: Session, bot_id: uuid.UUID, query: str, k: int = 6, mode: str = "hybrid",
-             rerank: bool = True) -> list[Hit]:
-    """Up to k chunks for the query, best first.
+             rerank: bool = True, embedder: Embedder | None = None) -> list[Hit]:
+    """Up to k chunks for the query, best first. An empty list means "the documents don't cover this".
 
-    With a re-ranker configured (and rerank=True) only chunks scoring >= RERANK_MIN_SCORE are
-    returned, so an empty list means "the documents don't cover this". mode: hybrid | vector |
-    keyword (the latter two exist for the retrieval eval).
+    rerank=True applies the grounding gate: the cross-encoder threshold if a re-ranker is configured,
+    else the similarity gate. mode: hybrid | vector | keyword (the latter two exist for the eval).
     """
     s = get_settings()
     reranker = get_reranker() if rerank else None
     pool = max(k * 3, 20)
-    vec = vector_search(db, bot_id, get_embedder().embed_query(query), pool) if mode != "keyword" else []
+    qvec = (embedder or get_embedder()).embed_query(query) if mode != "keyword" else None
+    vec_hits = vector_search(db, bot_id, qvec, pool) if qvec is not None else []
+    vec = [cid for cid, _ in vec_hits]
+    if rerank and not reranker and vec_hits and vec_hits[0][1] < s.similarity_min:
+        return []  # similarity gate: even the closest chunk isn't about this question
     kw = keyword_search(db, bot_id, query, pool) if mode != "vector" else []
     scores = rrf([r for r in (vec, kw) if r])
     n = max(k, s.rerank_candidates) if reranker else k

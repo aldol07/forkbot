@@ -70,11 +70,17 @@ def request_origin(request: Request) -> str | None:
     return None
 
 
+def same_origin(request: Request, host: str | None) -> bool:
+    """The API's own pages (the /demo page) may always use any bot: only this server serves them."""
+    return bool(host) and host == (request.url.hostname or "").lower()
+
+
 def allowed_bot(public_id: str, request: Request, db: Session = Depends(get_db)) -> Bot:
     bot = db.scalar(select(Bot).where(Bot.public_id == public_id))
     if not bot:
         raise HTTPException(404, "bot not found")
-    if not host_allowed(origin_host(request_origin(request)), bot.allowed_domains or []):
+    host = origin_host(request_origin(request))
+    if not (host_allowed(host, bot.allowed_domains or []) or same_origin(request, host)):
         raise HTTPException(403, "this website is not allowed to use this bot")
     return bot
 

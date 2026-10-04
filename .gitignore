@@ -34,3 +34,9 @@ Thumbs.db
 # local working notes / helpers (kept on disk, not published)
 PLAN.md
 setup.ps1
+
+# dev-only: tests, eval/benchmark scripts, local Postgres (kept on disk, not published)
+backend/tests/
+backend/pytest.ini
+backend/scripts/
+docker-compose.yml

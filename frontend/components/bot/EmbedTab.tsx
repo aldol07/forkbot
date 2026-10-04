@@ -32,7 +32,7 @@ export default function EmbedTab({ bot, onSaved }: { bot: Bot; onSaved: (b: Bot)
         </div>
         <div className="card">
           <h2 className="h2">2 · try it on a demo page</h2>
-          <p className="muted" style={{ marginTop: 0 }}>a pretend customer site served by the api. it works because <span className="mono">localhost</span> is allowed.</p>
+          <p className="muted" style={{ marginTop: 0 }}>a pretend customer site served by the api itself, so it works without adding a domain.</p>
           <a className="btn" href={`${PUBLIC_API}/demo?bot=${bot.public_id}`} target="_blank" rel="noreferrer">open demo <span className="arrow sm"><Arrow /></span></a>
         </div>
       </div>

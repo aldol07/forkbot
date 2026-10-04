@@ -11,7 +11,7 @@ bcrypt==4.3.0
 email-validator==2.2.0
 pypdf==5.5.0
 openai==1.82.0
-fastembed==0.7.1
+# fastembed==0.7.1  # local embeddings / re-ranker (off: too heavy for small free hosts; see services/embeddings.py)
 httpx==0.28.1
 pytest==8.3.5
 alembic==1.20.0
