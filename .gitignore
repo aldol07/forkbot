@@ -40,3 +40,8 @@ backend/tests/
 backend/pytest.ini
 backend/scripts/
 docker-compose.yml
+
+# deployment config (kept locally)
+render.yaml
+backend/Dockerfile
+backend/.dockerignore
