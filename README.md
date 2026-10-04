@@ -55,18 +55,6 @@ npm install && npm run dev           # http://localhost:3000
 Database migrations run on API startup. Then: sign up → create a bot → paste an LLM key in the bot's
 **settings** tab → upload a document → chat → **embed** tab → *open demo*.
 
-## Layout
-
-```
-backend/app/        main · config · db · models · schemas · security · crypto · storage
-  llm/providers.py  one OpenAI-compatible client for every provider, user keys, key checks
-  services/         parsing · chunking · embeddings · ingest · retrieval · rerank · rewrite · chat
-  routers/          auth · bots · documents · chat · conversations · keys · public (widget)
-  static/widget.js  the embeddable widget
-backend/migrations/ Alembic
-frontend/           Next.js dashboard
-```
-
 ---
 
 Built by **aldol** · [dubeykartikay13@gmail.com](mailto:dubeykartikay13@gmail.com)
